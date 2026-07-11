@@ -1,4 +1,4 @@
-# GLaDOS Auto Check-in
+# GLaDOS 自动签到脚本（Surge / Quantumult X）
 
 适用于 Surge 和 Quantumult X 的 GLaDOS 自动签到脚本。脚本会从你自己的浏览器请求中获取登录凭据，并保存在代理工具的本地持久化存储中；仓库和通知不会上传 Cookie。
 
