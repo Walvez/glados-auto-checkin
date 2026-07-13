@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS 自动签到（脚本猫）
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.0.3
+// @version      1.0.4
 // @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -122,9 +122,14 @@ function isAlreadyCheckedIn(result) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
+  const code = Number(result && result.code);
+  const points = Number(result && result.points);
 
   return (
+    (code === 1 && Number.isFinite(points) && points === 0) ||
     message.includes("please try tomorrow") ||
+    message.includes("today's observation logged") ||
+    message.includes("return tomorrow") ||
     message.includes("already check") ||
     message.includes("今日已签到") ||
     message.includes("已经签到") ||
