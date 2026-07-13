@@ -94,7 +94,7 @@ async function testNetworkFailureNotifies() {
 }
 
 (async () => {
-  assert.match(script, /@crontab\s+0,30 7-23 once \* \*/);
+  assert.match(script, /@crontab\s+5-55\/5 \* once \* \*/);
   assert.doesNotMatch(script, /evil_gladoscookie|evil_galdosauthorization/);
   await testSuccessfulCheckin();
   await testAlreadyCheckedIn();
