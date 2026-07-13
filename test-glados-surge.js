@@ -50,8 +50,23 @@ async function testCaptureCookie() {
 
   assert.equal(result.store.evil_gladoscookie, "session=test");
   assert.equal(result.store.evil_galdosauthorization, "Bearer token");
+  assert.equal(result.store.evil_gladosorigin, "https://glados.rocks");
   assert.equal(result.notifications[0].title, "GLaDOS");
   assert.match(result.notifications[0].body, /登录凭据/);
+}
+
+async function testCaptureNetworkDomain() {
+  const result = await runScript({
+    store: {},
+    $request: {
+      method: "GET",
+      url: "https://glados.network/console/checkin",
+      headers: { Cookie: "session=network" },
+    },
+  });
+
+  assert.equal(result.store.evil_gladoscookie, "session=network");
+  assert.equal(result.store.evil_gladosorigin, "https://glados.network");
 }
 
 async function testCaptureCookieFromAnyGladosRequest() {
@@ -131,21 +146,28 @@ async function testCronSigninWithAuthorizationOnly() {
   });
 
   assert.equal(postOptions.headers.Authorization, "Bearer auth-only");
+  assert.equal(postOptions.url, "https://glados.rocks/api/user/checkin");
+  assert.equal(postOptions.headers.Origin, "https://glados.rocks");
   assert.equal(result.doneValue.status, "ok");
-  assert.equal(result.doneValue.version, "points-total-20260711");
+  assert.equal(result.doneValue.version, "dual-domain-20260713");
 }
 
 async function testCronSignin() {
+  let postOptions;
+  let getOptions;
   const result = await runScript({
     store: {
       evil_gladoscookie: "session=test",
       evil_galdosauthorization: "Bearer token",
+      evil_gladosorigin: "https://glados.network",
     },
     $httpClient: {
-      post: (_options, callback) => {
+      post: (options, callback) => {
+        postOptions = options;
         callback(null, { status: 200 }, JSON.stringify({ list: [{ change: 10, balance: 128 }] }));
       },
-      get: (_options, callback) => {
+      get: (options, callback) => {
+        getOptions = options;
         callback(
           null,
           { status: 200 },
@@ -159,6 +181,9 @@ async function testCronSignin() {
   });
 
   assert.equal(result.notifications[0].title, "GLaDOS");
+  assert.equal(postOptions.url, "https://glados.network/api/user/checkin");
+  assert.equal(postOptions.headers.Origin, "https://glados.network");
+  assert.equal(getOptions.url, "https://glados.network/api/user/status");
   assert.equal(result.notifications[0].subtitle, "账户：user@example.com");
   assert.match(result.notifications[0].body, /今日签到获得10积分，共128积分/);
   assert.doesNotMatch(result.notifications[0].body, /获得10天/);
@@ -166,7 +191,7 @@ async function testCronSignin() {
   assert.match(result.notifications[0].body, /剩余34天/);
   assert.deepEqual(result.doneValue, {
     status: "ok",
-    version: "points-total-20260711",
+    version: "dual-domain-20260713",
     checkinMessage: "今日签到获得10积分，共128积分",
     remainingDays: 34,
   });
@@ -219,12 +244,13 @@ async function testQuantumultXRuntime() {
     $notify: (title, subtitle, body) => resultNotifications.push({ title, subtitle, body }),
     $request: {
       method: "GET",
-      url: "https://glados.rocks/console/checkin",
+      url: "https://glados.network/console/checkin",
       headers: { Cookie: "session=qx" },
     },
   });
 
   assert.equal(result.store.evil_gladoscookie, "session=qx");
+  assert.equal(result.store.evil_gladosorigin, "https://glados.network");
   assert.equal(resultNotifications[0].body, "获取 GLaDOS 登录凭据成功");
 }
 
@@ -232,8 +258,10 @@ async function testQuantumultXCronSignin() {
   const store = {
     evil_gladoscookie: "session=qx",
     evil_galdosauthorization: "Bearer qx",
+    evil_gladosorigin: "https://glados.network",
   };
   const notifications = [];
+  const requests = [];
   const responses = [
     { body: JSON.stringify({ list: [{ change: "7.5", balance: "135.5" }] }) },
     { body: JSON.stringify({ code: 0, data: { email: "qx@example.com", leftDays: 441 } }) },
@@ -251,11 +279,16 @@ async function testQuantumultXCronSignin() {
     },
     $notify: (title, subtitle, body) => notifications.push({ title, subtitle, body }),
     $task: {
-      fetch: async () => responses.shift(),
+      fetch: async (options) => {
+        requests.push(options);
+        return responses.shift();
+      },
     },
   });
 
   assert.equal(result.doneValue.status, "ok");
+  assert.equal(requests[0].url, "https://glados.network/api/user/checkin");
+  assert.equal(requests[1].url, "https://glados.network/api/user/status");
   assert.equal(notifications[0].subtitle, "账户：qx@example.com");
   assert.match(notifications[0].body, /今日签到获得7\.5积分，共135\.5积分/);
   assert.match(notifications[0].body, /剩余441天/);
@@ -265,6 +298,7 @@ const resultNotifications = [];
 
 (async () => {
   await testCaptureCookie();
+  await testCaptureNetworkDomain();
   await testCaptureCookieFromAnyGladosRequest();
   await testRepeatedCaptureDoesNotNotifyWhenCookieIsUnchanged();
   await testCaptureAuthorizationWithoutCookie();

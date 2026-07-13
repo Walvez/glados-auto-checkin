@@ -1,8 +1,8 @@
 const COOKIE_KEY = "evil_gladoscookie";
 const AUTH_KEY = "evil_galdosauthorization";
-const CHECKIN_URL = "https://glados.rocks/api/user/checkin";
-const STATUS_URL = "https://glados.rocks/api/user/status";
-const SCRIPT_VERSION = "points-total-20260711";
+const ORIGIN_KEY = "evil_gladosorigin";
+const DEFAULT_ORIGIN = "https://glados.rocks";
+const SCRIPT_VERSION = "dual-domain-20260713";
 
 let finished = false;
 
@@ -60,6 +60,16 @@ function formatPoints(value) {
   return String(value).replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
 }
 
+function originFromUrl(url) {
+  const match = /^https:\/\/glados\.(network|rocks)(?:\/|$)/i.exec(url || "");
+  return match ? `https://glados.${match[1].toLowerCase()}` : "";
+}
+
+function storedOrigin() {
+  const origin = readStore(ORIGIN_KEY);
+  return origin === "https://glados.network" || origin === "https://glados.rocks" ? origin : DEFAULT_ORIGIN;
+}
+
 function saveCookie() {
   if (!$request || $request.method === "OPTIONS") {
     return done();
@@ -67,6 +77,7 @@ function saveCookie() {
 
   const cookie = header($request.headers, "Cookie");
   const authorization = header($request.headers, "Authorization");
+  const origin = originFromUrl($request.url);
   const previousCookie = readStore(COOKIE_KEY);
   const previousAuthorization = readStore(AUTH_KEY);
 
@@ -75,6 +86,9 @@ function saveCookie() {
   }
   if (authorization) {
     writeStore(authorization, AUTH_KEY);
+  }
+  if (origin && (cookie || authorization)) {
+    writeStore(origin, ORIGIN_KEY);
   }
 
   if (cookie && cookie !== previousCookie) {
@@ -103,11 +117,11 @@ function messageFromCheckin(result) {
   return result.message || "签到结果未知";
 }
 
-function checkStatus(cookie, authorization, checkinMessage) {
+function checkStatus(origin, cookie, authorization, checkinMessage) {
   request(
     "GET",
     {
-      url: STATUS_URL,
+      url: `${origin}/api/user/status`,
       headers: {
         Cookie: cookie,
         Authorization: authorization || "",
@@ -136,19 +150,20 @@ function checkStatus(cookie, authorization, checkinMessage) {
 function checkin() {
   const cookie = readStore(COOKIE_KEY);
   const authorization = readStore(AUTH_KEY);
+  const origin = storedOrigin();
 
   if (!cookie && !authorization) {
-    notify("", "请先登录 glados.rocks 并刷新一次页面，让 Surge 获取登录凭据");
+    notify("", "请先登录 glados.network 或 glados.rocks 并刷新一次页面，让代理工具获取登录凭据");
     return done({ status: "needs_cookie", version: SCRIPT_VERSION });
   }
 
   request(
     "POST",
     {
-      url: CHECKIN_URL,
+      url: `${origin}/api/user/checkin`,
       headers: {
         Accept: "application/json, text/plain, */*",
-        Origin: "https://glados.rocks",
+        Origin: origin,
         Cookie: cookie,
         "Content-Type": "application/json;charset=utf-8",
         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
@@ -163,7 +178,7 @@ function checkin() {
       }
 
       const result = parseJson(body);
-      checkStatus(cookie, authorization, messageFromCheckin(result));
+      checkStatus(origin, cookie, authorization, messageFromCheckin(result));
     }
   );
 }
