@@ -53,8 +53,8 @@ async function testSuccessfulCheckin() {
 
   assert.equal(result.error, undefined);
   assert.equal(result.requests.length, 2);
-  assert.equal(result.requests[0].url, "https://glados.rocks/api/user/status");
-  assert.equal(result.requests[1].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
+  assert.equal(result.requests[1].url, "https://glados.network/api/user/checkin");
   assert.equal(result.requests[1].anonymous, false);
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS · user@example.com");
@@ -80,7 +80,7 @@ async function testNeedsLogin() {
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 需要重新登录");
   result.notifications[0].onclick();
-  assert.deepEqual(result.openedTabs[0], ["https://glados.rocks/login", true]);
+  assert.deepEqual(result.openedTabs[0], ["https://glados.network/login", true]);
 }
 
 async function testNetworkFailureNotifies() {
@@ -96,6 +96,7 @@ async function testNetworkFailureNotifies() {
 (async () => {
   assert.match(script, /@crontab\s+5-55\/5 \* once \* \*/);
   assert.doesNotMatch(script, /evil_gladoscookie|evil_galdosauthorization/);
+  assert.doesNotMatch(script, /glados\.rocks/);
   await testSuccessfulCheckin();
   await testAlreadyCheckedIn();
   await testNeedsLogin();

@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         GLaDOS 自动签到（脚本猫）
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.0.1
+// @version      1.0.2
 // @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
-// @icon         https://glados.rocks/favicon.ico
+// @icon         https://glados.network/favicon.ico
 // @crontab      5-55/5 * once * *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_notification
 // @grant        GM_openInTab
 // @grant        GM_log
-// @connect      glados.rocks
+// @connect      glados.network
 // @license      MIT
 // @tag          GLaDOS
 // @tag          自动签到
@@ -20,9 +20,9 @@
 // @supportURL   https://github.com/Walvez/glados-auto-checkin/issues
 // ==/UserScript==
 
-const CHECKIN_URL = "https://glados.rocks/api/user/checkin";
-const STATUS_URL = "https://glados.rocks/api/user/status";
-const LOGIN_URL = "https://glados.rocks/login";
+const CHECKIN_URL = "https://glados.network/api/user/checkin";
+const STATUS_URL = "https://glados.network/api/user/status";
+const LOGIN_URL = "https://glados.network/login";
 const REQUEST_TIMEOUT = 15000;
 
 function log(message, level = "info") {
@@ -153,7 +153,7 @@ async function run() {
     url: CHECKIN_URL,
     headers: {
       Accept: "application/json, text/plain, */*",
-      Origin: "https://glados.rocks",
+      Origin: "https://glados.network",
       "Content-Type": "application/json;charset=UTF-8",
     },
     data: JSON.stringify({ token: "glados.one" }),
