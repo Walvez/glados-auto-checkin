@@ -1,6 +1,14 @@
-# GLaDOS 自动签到脚本（Surge / Quantumult X）
+# GLaDOS 自动签到（Chrome / Edge / Surge / Quantumult X）
 
-适用于 Surge 和 Quantumult X 的 GLaDOS 自动签到脚本。脚本会从你自己的浏览器请求中获取登录凭据，并保存在代理工具的本地持久化存储中；仓库和通知不会上传 Cookie。
+本项目提供三种独立的 GLaDOS 自动签到方式：Chrome / Edge 浏览器使用 ScriptCat（脚本猫）脚本管理器，Surge 使用模块，Quantumult X 使用重写规则与定时任务。所有版本都支持 `glados.network` 和 `glados.rocks`，只访问 GLaDOS 官方接口，不会把 Cookie 上传到仓库或第三方服务。
+
+## 选择安装方式
+
+| 使用环境 | 安装方式 | 是否需要 MitM | 适合场景 |
+| --- | --- | --- | --- |
+| Chrome / Edge | ScriptCat（脚本猫）扩展 + 浏览器后台脚本 | 不需要 | 电脑浏览器经常开启，希望安装后自动运行 |
+| Surge | 导入 `.sgmodule` 模块 | 需要 | 已使用 Surge 接管网络 |
+| Quantumult X | 导入重写规则并添加定时任务 | 需要 | 已使用 Quantumult X 接管网络 |
 
 签到通知包含账号、本次获得积分、累计积分和剩余天数，例如：
 
@@ -10,9 +18,51 @@
 剩余441天
 ```
 
-默认在每天 `07:15` 和 `15:15` 各运行一次。重复运行时，GLaDOS 通常会返回“今日已签到”。
+Surge / Quantumult X 版本默认在每天 `07:15` 和 `15:15` 各运行一次；ScriptCat 浏览器版本采用下文所述的候选时间与每日一次成功锁定机制。
 
-## Surge
+## Chrome / Edge 浏览器（ScriptCat 脚本管理器）
+
+这是专门用于 ScriptCat（脚本猫）扩展的浏览器后台定时脚本，不是普通的网页前台脚本。Chrome 和 Edge 均可使用。它不需要抓包、MitM 或复制 Cookie，也不需要保持 GLaDOS 网页打开；只要你在同一个浏览器中登录过 GLaDOS，脚本就会使用该浏览器现有的登录状态在后台完成签到。
+
+### 安装
+
+1. 安装并启用 ScriptCat（脚本猫）脚本管理器扩展：
+
+   - Chrome：[Chrome 应用商店正式版](https://chromewebstore.google.com/detail/scriptcat/ndcooeababalnlpkfedmmbbbgkljhpjf)
+   - Edge：[Microsoft Edge 加载项正式版](https://microsoftedge.microsoft.com/addons/detail/scriptcat/liilgpjgabokdklappibcjfablkpcekh)
+   - 其他安装方式：[ScriptCat 官方安装文档](https://docs.scriptcat.org/docs/use/use/)
+
+2. 打开下面的脚本发布页，点击“安装脚本”：
+
+```text
+https://scriptcat.org/zh-CN/script-show-page/7014
+```
+
+3. 在同一个 Chrome 或 Edge 中登录当前官网 [glados.network](https://glados.network/)；如果你仍在使用旧域名 `glados.rocks`，脚本也可以自动识别。
+4. 在脚本猫的脚本列表中确认“GLaDOS 自动签到（脚本猫）”已启用。
+
+脚本源文件为 [`glados.auto-checkin.scriptcat.user.js`](glados.auto-checkin.scriptcat.user.js)，发布版本采用 MIT 许可证。
+
+### 使用与定时规则
+
+脚本每天 `00:05–23:55` 设置候选运行时间（每小时的 `05、10、15……55` 分）；当天第一次成功后，脚本猫的 `once` 机制会跳过其余候选时间。因此正常情况下每天只执行一次，无论什么时候打开浏览器，通常 5 分钟内、跨整点时最多 10 分钟就会自动补签。
+
+签到通知会显示账号、本次获得积分、累计积分和剩余天数。登录失效时，通知会提示并可点击打开登录页。
+
+脚本会先检查 `glados.network`，未登录时再检查 `glados.rocks`，并始终使用检测到登录状态的同一域名完成签到。两个域名的 Cookie 不互通，但脚本可以分别识别，因此无需手动选择域名。
+
+首次安装后，建议在脚本猫的脚本列表中手动运行一次。若成功，会收到签到结果通知；若失败，可点击该脚本的运行状态查看日志。
+
+### 浏览器脚本权限
+
+- `GM_xmlhttpRequest`：只访问 `glados.network` 和 `glados.rocks` 的登录状态与签到接口。
+- `GM_notification`：显示签到结果和错误提醒。
+- `GM_openInTab`：仅在点击登录失效通知时打开 GLaDOS 登录页。
+- `GM_log`：记录必要的运行状态，方便排查问题。
+
+脚本不会读取、保存或上传 Cookie，不包含统计、广告、返利链接或第三方执行代码。
+
+## Surge（模块方式）
 
 ### 1. 安装模块
 
@@ -26,7 +76,7 @@ https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/Surge/glados-a
 
 ### 2. 获取登录凭据
 
-保持 Surge 接管网络，在你平时使用的浏览器中登录 [glados.rocks](https://glados.rocks/)，然后刷新页面。看到“获取 GLaDOS 登录凭据成功”通知即表示完成。
+保持 Surge 接管网络，在你平时使用的浏览器中登录 [glados.network](https://glados.network/) 或 `glados.rocks`，然后刷新页面。看到“获取 GLaDOS 登录凭据成功”通知即表示完成。脚本会记住实际登录的域名，并使用同一域名签到。
 
 Cookie 更新后，重新登录或刷新页面即可让 Surge 自动更新本地凭据。
 
@@ -40,7 +90,7 @@ Surge Mac 可在终端运行：
 
 命令中的文件名需要替换为脚本在本机的实际路径。若使用远程模块且没有本地脚本文件，可等待下一次定时任务触发，并在 Surge 的脚本日志中查看结果。
 
-## Quantumult X
+## Quantumult X（重写 + 定时任务方式）
 
 ### 1. 导入凭据获取规则
 
@@ -64,7 +114,7 @@ https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/QuantumultX/gl
 
 ### 3. 获取登录凭据并测试
 
-保持 Quantumult X 接管网络，在你平时使用的浏览器中登录 [glados.rocks](https://glados.rocks/) 并刷新页面。收到凭据获取成功通知后，在 Quantumult X 的定时任务列表中手动运行 `GLaDOS签到`。
+保持 Quantumult X 接管网络，在你平时使用的浏览器中登录 [glados.network](https://glados.network/) 或 `glados.rocks` 并刷新页面。收到凭据获取成功通知后，在 Quantumult X 的定时任务列表中手动运行 `GLaDOS签到`。脚本会记住实际登录的域名，并使用同一域名签到。
 
 ## 自定义运行时间
 
@@ -88,7 +138,7 @@ Surge 用户需要下载模块并修改 `cronexp` 后作为本地模块安装；
 
 ### 凭据是否会上传
 
-不会。脚本只把 Cookie 和 Authorization 保存在 Surge 或 Quantumult X 的本地持久化存储中，并仅发送给 `glados.rocks` 的官方接口。请勿公开代理工具的配置文件、运行日志或持久化数据。
+不会。浏览器版本由 ScriptCat 使用浏览器现有登录状态；Surge / Quantumult X 版本只把 Cookie、Authorization 和实际登录域名保存在代理工具的本地持久化存储中，并仅发送给对应的 GLaDOS 官方域名。请勿公开代理工具的配置文件、运行日志或持久化数据。
 
 ## 开发
 
