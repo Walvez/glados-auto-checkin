@@ -92,8 +92,10 @@ async function testAlreadyCheckedIn() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.match(result.notifications[0].text, /^今日已签到。\n当前共271积分\n剩余30天$/);
-  assert.doesNotMatch(result.notifications[0].text, /今日签到获得/);
+  assert.match(
+    result.notifications[0].text,
+    /^今日已签到。\n今日签到获得11积分，当前共271积分\n剩余30天$/,
+  );
 }
 
 async function testAlreadyCheckedInChineseMessage() {
@@ -104,6 +106,31 @@ async function testAlreadyCheckedInChineseMessage() {
 
   assert.equal(result.error, undefined);
   assert.match(result.notifications[0].text, /^今日已签到。/);
+}
+
+async function testCurrentAlreadyCheckedInResponse() {
+  const result = await runScript([
+    response({ code: 0, data: { email: "user@example.com", leftDays: 426 } }),
+    response({
+      code: 1,
+      points: 0,
+      message: "Today's observation logged. Return tomorrow for more points.",
+      list: [{
+        asset: "points",
+        business: "system:checkin",
+        change: "11.00000000",
+        balance: "271.0000000000000000",
+        detail: "2026-07-13",
+      }],
+    }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.equal(
+    result.notifications[0].text,
+    "今日已签到。\n今日签到获得11积分，当前共271积分\n剩余426天",
+  );
+  assert.doesNotMatch(result.notifications[0].text, /签到成功/);
 }
 
 async function testNeedsLogin() {
@@ -142,6 +169,7 @@ async function testNetworkFailureNotifies() {
   await testFallsBackToRocksLogin();
   await testAlreadyCheckedIn();
   await testAlreadyCheckedInChineseMessage();
+  await testCurrentAlreadyCheckedInResponse();
   await testNeedsLogin();
   await testNetworkFailureNotifies();
   console.log("glados scriptcat tests passed");
