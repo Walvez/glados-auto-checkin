@@ -1,6 +1,6 @@
-# GLaDOS 自动签到脚本（Surge / Quantumult X）
+# GLaDOS 自动签到脚本（脚本猫 / Surge / Quantumult X）
 
-适用于 Surge 和 Quantumult X 的 GLaDOS 自动签到脚本。脚本会从你自己的浏览器请求中获取登录凭据，并保存在代理工具的本地持久化存储中；仓库和通知不会上传 Cookie。
+提供 ScriptCat 浏览器脚本以及 Surge、Quantumult X 代理工具脚本。ScriptCat 版本直接使用 Chrome 现有登录状态；Surge / Quantumult X 版本从你自己的浏览器请求中获取登录凭据并保存在代理工具的本地持久化存储中。所有版本都只访问 GLaDOS 官方接口，仓库和通知不会上传 Cookie。
 
 签到通知包含账号、本次获得积分、累计积分和剩余天数，例如：
 
@@ -10,7 +10,42 @@
 剩余441天
 ```
 
-默认在每天 `07:15` 和 `15:15` 各运行一次。重复运行时，GLaDOS 通常会返回“今日已签到”。
+Surge / Quantumult X 版本默认在每天 `07:15` 和 `15:15` 各运行一次；ScriptCat 浏览器版本采用下文所述的候选时间与每日一次成功锁定机制。
+
+## Chrome 浏览器脚本（ScriptCat）
+
+这是专门用于 Chrome + ScriptCat（脚本猫）扩展的浏览器后台脚本，不是普通的网页前台脚本。它不需要抓包或复制 Cookie，也不需要保持 GLaDOS 网页打开；只要你在同一个 Chrome 中登录过 GLaDOS，脚本就会使用浏览器现有的登录状态在后台完成签到。
+
+### 安装
+
+1. 在 Chrome 中安装并启用 [ScriptCat（脚本猫）扩展](https://docs.scriptcat.org/docs/use/use/)。
+2. 打开下面的脚本发布页，点击“安装脚本”：
+
+```text
+https://scriptcat.org/zh-CN/script-show-page/7014
+```
+
+3. 在同一个 Chrome 中登录 [glados.rocks](https://glados.rocks/)。
+4. 在脚本猫的脚本列表中确认“GLaDOS 自动签到（脚本猫）”已启用。
+
+脚本源文件为 [`glados.auto-checkin.scriptcat.user.js`](glados.auto-checkin.scriptcat.user.js)，发布版本采用 MIT 许可证。
+
+### 使用与定时规则
+
+脚本每天 `07:00–23:30` 每半小时有一个候选运行时间；当天第一次成功后，脚本猫的 `once` 机制会跳过其余候选时间。因此正常情况下只执行一次，浏览器早晨没有打开或临时断网时也还有自动补签机会。
+
+签到通知会显示账号、本次获得积分、累计积分和剩余天数。登录失效时，通知会提示并可点击打开登录页。
+
+首次安装后，建议在脚本猫的脚本列表中手动运行一次。若成功，会收到签到结果通知；若失败，可点击该脚本的运行状态查看日志。
+
+### 浏览器脚本权限
+
+- `GM_xmlhttpRequest`：只访问 `glados.rocks` 的登录状态和签到接口。
+- `GM_notification`：显示签到结果和错误提醒。
+- `GM_openInTab`：仅在点击登录失效通知时打开 GLaDOS 登录页。
+- `GM_log`：记录必要的运行状态，方便排查问题。
+
+脚本不会读取、保存或上传 Cookie，不包含统计、广告、返利链接或第三方执行代码。
 
 ## Surge
 
