@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS 自动签到（脚本猫）
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.0.2
+// @version      1.0.3
 // @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -117,18 +117,38 @@ function notifyLogin(message) {
   });
 }
 
+function isAlreadyCheckedIn(result) {
+  const message = String(result && result.message ? result.message : "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+  return (
+    message.includes("please try tomorrow") ||
+    message.includes("already check") ||
+    message.includes("今日已签到") ||
+    message.includes("已经签到") ||
+    message.includes("明天再试")
+  );
+}
+
 function checkinMessage(result) {
-  if (result.message === "Please Try Tomorrow") {
-    return "今日已签到";
+  const record = result.list && result.list[0];
+
+  if (isAlreadyCheckedIn(result)) {
+    const total = record && record.balance !== undefined
+      ? `\n当前共${formatPoints(record.balance)}积分`
+      : "";
+    return `今日已签到。${total}`;
   }
 
-  const record = result.list && result.list[0];
   if (record && record.change !== undefined) {
     const total = record.balance !== undefined ? `，共${formatPoints(record.balance)}积分` : "";
-    return `今日签到获得${formatPoints(record.change)}积分${total}`;
+    return `签到成功！\n今日签到获得${formatPoints(record.change)}积分${total}`;
   }
 
-  return result.message || "签到完成";
+  const detail = result.message ? `\n${result.message}` : "";
+  return `签到成功！${detail}`;
 }
 
 async function findLoggedInSession() {
