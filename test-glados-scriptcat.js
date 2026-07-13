@@ -92,8 +92,10 @@ async function testAlreadyCheckedIn() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.match(result.notifications[0].text, /^今日已签到。\n当前共271积分\n剩余30天$/);
-  assert.doesNotMatch(result.notifications[0].text, /今日签到获得/);
+  assert.match(
+    result.notifications[0].text,
+    /^今日已签到。\n今日签到获得11积分，当前共271积分\n剩余30天$/,
+  );
 }
 
 async function testAlreadyCheckedInChineseMessage() {
@@ -126,9 +128,9 @@ async function testCurrentAlreadyCheckedInResponse() {
   assert.equal(result.error, undefined);
   assert.equal(
     result.notifications[0].text,
-    "今日已签到。\n当前共271积分\n剩余426天",
+    "今日已签到。\n今日签到获得11积分，当前共271积分\n剩余426天",
   );
-  assert.doesNotMatch(result.notifications[0].text, /签到成功|今日签到获得/);
+  assert.doesNotMatch(result.notifications[0].text, /签到成功/);
 }
 
 async function testNeedsLogin() {

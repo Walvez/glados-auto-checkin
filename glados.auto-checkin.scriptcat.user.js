@@ -141,10 +141,14 @@ function checkinMessage(result) {
   const record = result.list && result.list[0];
 
   if (isAlreadyCheckedIn(result)) {
-    const total = record && record.balance !== undefined
-      ? `\n当前共${formatPoints(record.balance)}积分`
+    const earned = record && record.change !== undefined
+      ? `今日签到获得${formatPoints(record.change)}积分`
       : "";
-    return `今日已签到。${total}`;
+    const total = record && record.balance !== undefined
+      ? `当前共${formatPoints(record.balance)}积分`
+      : "";
+    const pointsText = [earned, total].filter(Boolean).join("，");
+    return `今日已签到。${pointsText ? `\n${pointsText}` : ""}`;
   }
 
   if (record && record.change !== undefined) {
