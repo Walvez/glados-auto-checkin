@@ -17,8 +17,11 @@ async function runScript(responses) {
   const requests = [];
 
   const context = {
-    setTimeout,
-    clearTimeout,
+    setTimeout: (callback) => {
+      callback();
+      return 0;
+    },
+    clearTimeout: () => {},
     GM_log: (message, level) => logs.push({ message, level }),
     GM_notification: (options) => notifications.push(options),
     GM_openInTab: (...args) => openedTabs.push(args),
@@ -62,6 +65,22 @@ async function testSuccessfulCheckin() {
   assert.match(result.notifications[0].text, /剩余441天/);
 }
 
+async function testFallsBackToRocksLogin() {
+  const result = await runScript([
+    response({ code: -2, message: "Not logged in" }),
+    response({ code: 0, data: { email: "rocks@example.com", leftDays: 88 } }),
+    response({ list: [{ change: 9, balance: 99 }] }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.requests.length, 3);
+  assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
+  assert.equal(result.requests[1].url, "https://glados.rocks/api/user/status");
+  assert.equal(result.requests[2].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(result.requests[2].headers.Origin, "https://glados.rocks");
+  assert.equal(result.notifications[0].title, "GLaDOS · rocks@example.com");
+}
+
 async function testAlreadyCheckedIn() {
   const result = await runScript([
     response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
@@ -73,10 +92,13 @@ async function testAlreadyCheckedIn() {
 }
 
 async function testNeedsLogin() {
-  const result = await runScript([response({ code: -2, message: "Not logged in" })]);
+  const result = await runScript([
+    response({ code: -2, message: "Not logged in" }),
+    response({ code: -2, message: "Not logged in" }),
+  ]);
 
   assert.match(result.error.message, /需要登录/);
-  assert.equal(result.requests.length, 1);
+  assert.equal(result.requests.length, 2);
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 需要重新登录");
   result.notifications[0].onclick();
@@ -84,20 +106,25 @@ async function testNeedsLogin() {
 }
 
 async function testNetworkFailureNotifies() {
-  const originalSetTimeout = setTimeout;
-  const result = await runScript([new Error("offline"), new Error("offline")]);
+  const result = await runScript([
+    new Error("offline"),
+    new Error("offline"),
+    new Error("offline"),
+    new Error("offline"),
+  ]);
 
-  assert.ok(originalSetTimeout);
   assert.match(result.error.message, /网络请求失败/);
-  assert.equal(result.requests.length, 2);
+  assert.equal(result.requests.length, 4);
   assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
 }
 
 (async () => {
   assert.match(script, /@crontab\s+5-55\/5 \* once \* \*/);
   assert.doesNotMatch(script, /evil_gladoscookie|evil_galdosauthorization/);
-  assert.doesNotMatch(script, /glados\.rocks/);
+  assert.match(script, /@connect\s+glados\.network/);
+  assert.match(script, /@connect\s+glados\.rocks/);
   await testSuccessfulCheckin();
+  await testFallsBackToRocksLogin();
   await testAlreadyCheckedIn();
   await testNeedsLogin();
   await testNetworkFailureNotifies();

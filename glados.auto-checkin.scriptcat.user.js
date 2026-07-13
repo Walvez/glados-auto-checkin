@@ -11,6 +11,7 @@
 // @grant        GM_openInTab
 // @grant        GM_log
 // @connect      glados.network
+// @connect      glados.rocks
 // @license      MIT
 // @tag          GLaDOS
 // @tag          自动签到
@@ -20,8 +21,7 @@
 // @supportURL   https://github.com/Walvez/glados-auto-checkin/issues
 // ==/UserScript==
 
-const CHECKIN_URL = "https://glados.network/api/user/checkin";
-const STATUS_URL = "https://glados.network/api/user/status";
+const GLADOS_ORIGINS = ["https://glados.network", "https://glados.rocks"];
 const LOGIN_URL = "https://glados.network/login";
 const REQUEST_TIMEOUT = 15000;
 
@@ -131,29 +131,52 @@ function checkinMessage(result) {
   return result.message || "签到完成";
 }
 
+async function findLoggedInSession() {
+  let lastError;
+  let loginMessage = "";
+
+  for (const origin of GLADOS_ORIGINS) {
+    try {
+      const status = await requestWithRetry({
+        method: "GET",
+        url: `${origin}/api/user/status`,
+        headers: {
+          Accept: "application/json, text/plain, */*",
+        },
+      });
+
+      if (status.code === 0 && status.data) {
+        return { origin, status };
+      }
+
+      loginMessage = status.message || loginMessage;
+    } catch (error) {
+      lastError = error;
+      log(`${origin} 登录状态检查失败：${error.message}`, "warn");
+    }
+  }
+
+  if (lastError && !loginMessage) {
+    throw lastError;
+  }
+
+  const reason = loginMessage || "两个 GLaDOS 域名均未读取到登录状态";
+  notifyLogin(reason);
+  throw new Error(`需要登录：${reason}`);
+}
+
 async function run() {
   log("开始检查登录状态");
 
-  const status = await requestWithRetry({
-    method: "GET",
-    url: STATUS_URL,
-    headers: {
-      Accept: "application/json, text/plain, */*",
-    },
-  });
-
-  if (status.code !== 0 || !status.data) {
-    const reason = status.message || "未读取到登录状态";
-    notifyLogin(reason);
-    throw new Error(`需要登录：${reason}`);
-  }
+  const { origin, status } = await findLoggedInSession();
+  log(`使用已登录域名：${origin}`);
 
   const result = await requestWithRetry({
     method: "POST",
-    url: CHECKIN_URL,
+    url: `${origin}/api/user/checkin`,
     headers: {
       Accept: "application/json, text/plain, */*",
-      Origin: "https://glados.network",
+      Origin: origin,
       "Content-Type": "application/json;charset=UTF-8",
     },
     data: JSON.stringify({ token: "glados.one" }),
