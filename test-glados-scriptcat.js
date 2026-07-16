@@ -10,7 +10,7 @@ function response(body, status = 200) {
   return { status, response: body, responseText: JSON.stringify(body) };
 }
 
-async function runScript(responses) {
+async function runScript(responses, extraContext = {}) {
   const notifications = [];
   const logs = [];
   const openedTabs = [];
@@ -34,6 +34,7 @@ async function runScript(responses) {
         options.onload(next);
       }
     },
+    ...extraContext,
   };
 
   const promise = vm.runInNewContext(`(function () {\n${script}\n})()`, context, { timeout: 1000 });
@@ -60,7 +61,7 @@ async function testSuccessfulCheckin() {
   assert.equal(result.requests[1].url, "https://glados.network/api/user/checkin");
   assert.equal(result.requests[1].anonymous, false);
   assert.equal(result.notifications.length, 1);
-  assert.equal(result.notifications[0].title, "GLaDOS · user@example.com");
+  assert.equal(result.notifications[0].title, "GLaDOS · us***r@example.com");
   assert.match(result.notifications[0].text, /^签到成功！\n今日签到获得10积分，共128\.5积分/);
   assert.match(result.notifications[0].text, /剩余441天/);
 }
@@ -78,7 +79,7 @@ async function testFallsBackToRocksLogin() {
   assert.equal(result.requests[1].url, "https://glados.rocks/api/user/status");
   assert.equal(result.requests[2].url, "https://glados.rocks/api/user/checkin");
   assert.equal(result.requests[2].headers.Origin, "https://glados.rocks");
-  assert.equal(result.notifications[0].title, "GLaDOS · rocks@example.com");
+  assert.equal(result.notifications[0].title, "GLaDOS · ro***s@example.com");
 }
 
 async function testAlreadyCheckedIn() {
@@ -160,6 +161,88 @@ async function testNetworkFailureNotifies() {
   assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
 }
 
+async function testUnknownCheckinResponseFailsClosed() {
+  const result = await runScript([
+    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    response({ code: -1, message: "server maintenance" }),
+  ]);
+
+  assert.match(result.error.message, /签到接口返回异常/);
+  assert.equal(result.notifications.length, 1);
+  assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
+  assert.doesNotMatch(result.notifications[0].text, /签到成功/);
+}
+
+async function testInvalidJsonFailsClosed() {
+  const invalid = { status: 200, response: null, responseText: "<html>bad gateway</html>" };
+  const result = await runScript([
+    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    invalid,
+    invalid,
+  ]);
+
+  assert.match(result.error.message, /无法解析/);
+  assert.equal(result.requests.length, 3);
+  assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
+}
+
+async function testRetriesHttp429() {
+  const result = await runScript([
+    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    response({ message: "rate limited" }, 429),
+    response({ list: [{ change: 3, balance: 30 }] }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.requests.length, 3);
+  assert.match(result.notifications[0].text, /签到成功/);
+}
+
+async function testHttp403PromptsLoginWithoutRetry() {
+  const result = await runScript([
+    response({ message: "forbidden" }, 403),
+    response({ message: "forbidden" }, 403),
+  ]);
+
+  assert.match(result.error.message, /需要登录/);
+  assert.equal(result.requests.length, 2);
+  assert.equal(result.notifications.length, 1);
+  assert.equal(result.notifications[0].title, "GLaDOS 需要重新登录");
+}
+
+async function testExplicitSuccessWithoutPointRecord() {
+  const result = await runScript([
+    response({ code: 0, data: { email: "user@example.com", leftDays: null } }),
+    response({ code: 0, message: "Checkin success" }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.match(result.notifications[0].text, /^签到成功！/);
+  assert.doesNotMatch(result.notifications[0].text, /剩余NaN天/);
+}
+
+async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
+  const values = { glados_notify_pushdeer: "push-key" };
+  const result = await runScript(
+    [
+      response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+      response({ list: [{ change: 3, balance: 30 }] }),
+      response({ code: 0 }),
+    ],
+    {
+      GM_getValue: async (key, fallback) => values[key] || fallback,
+    }
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.requests.length, 3);
+  assert.equal(result.requests[2].url, "https://api2.pushdeer.com/message/push");
+  assert.equal(result.requests[2].anonymous, true);
+  assert.equal(result.requests[2].headers.Cookie, undefined);
+  assert.doesNotMatch(result.requests[2].data, /user@example\.com/);
+  assert.match(result.requests[2].data, /us\*\*\*r@example\.com/);
+}
+
 (async () => {
   assert.match(script, /@crontab\s+5-55\/5 \* once \* \*/);
   assert.doesNotMatch(script, /evil_gladoscookie|evil_galdosauthorization/);
@@ -172,6 +255,12 @@ async function testNetworkFailureNotifies() {
   await testCurrentAlreadyCheckedInResponse();
   await testNeedsLogin();
   await testNetworkFailureNotifies();
+  await testUnknownCheckinResponseFailsClosed();
+  await testInvalidJsonFailsClosed();
+  await testRetriesHttp429();
+  await testHttp403PromptsLoginWithoutRetry();
+  await testExplicitSuccessWithoutPointRecord();
+  await testOptionalPushDeerNotificationDoesNotLeakCredentials();
   console.log("glados scriptcat tests passed");
 })().catch((error) => {
   console.error(error);

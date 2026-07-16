@@ -1,8 +1,11 @@
 const COOKIE_KEY = "evil_gladoscookie";
 const AUTH_KEY = "evil_galdosauthorization";
 const ORIGIN_KEY = "evil_gladosorigin";
+const LAST_SUCCESS_KEY = "glados_last_success_date";
 const DEFAULT_ORIGIN = "https://glados.rocks";
-const SCRIPT_VERSION = "dual-domain-20260713";
+const SCRIPT_VERSION = "reliability-20260716";
+const MAX_REQUEST_ATTEMPTS = 2;
+const RETRY_DELAY = 1500;
 
 let finished = false;
 
@@ -31,7 +34,46 @@ function writeStore(value, key) {
     : $prefs.setValueForKey(value, key);
 }
 
-function request(method, options, callback) {
+function decodeParameter(value) {
+  try {
+    return decodeURIComponent(String(value || "").replace(/\+/g, " "));
+  } catch (error) {
+    return String(value || "");
+  }
+}
+
+function parseParameterString(source) {
+  const result = {};
+  String(source || "")
+    .replace(/^[?#]/, "")
+    .split("&")
+    .forEach((part) => {
+      if (!part) return;
+      const separator = part.indexOf("=");
+      const key = decodeParameter(separator >= 0 ? part.slice(0, separator) : part);
+      const value = decodeParameter(separator >= 0 ? part.slice(separator + 1) : "");
+      if (key) result[key] = value;
+    });
+  return result;
+}
+
+function notificationConfig() {
+  if (typeof $argument !== "undefined" && $argument) {
+    return parseParameterString($argument);
+  }
+
+  if (typeof $environment !== "undefined" && $environment && $environment.sourcePath) {
+    const sourcePath = String($environment.sourcePath);
+    const hashIndex = sourcePath.indexOf("#");
+    if (hashIndex >= 0) {
+      return parseParameterString(sourcePath.slice(hashIndex + 1));
+    }
+  }
+
+  return {};
+}
+
+function rawRequest(method, options, callback) {
   if (typeof $httpClient !== "undefined") {
     return $httpClient[method.toLowerCase()](options, callback);
   }
@@ -39,7 +81,109 @@ function request(method, options, callback) {
   $task
     .fetch(Object.assign({}, options, { method: method.toUpperCase() }))
     .then((response) => callback(null, response, response.body))
-    .catch((error) => callback(error.error || String(error)));
+    .catch((error) => callback(error.error || error.message || String(error)));
+}
+
+function sendRemoteNotifications(title, content, callback) {
+  const config = notificationConfig();
+  const jobs = [];
+
+  if (config.pushdeer) {
+    jobs.push({
+      name: "PushDeer",
+      url: "https://api2.pushdeer.com/message/push",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pushkey: config.pushdeer, text: `${title}\n\n${content}`, type: "text" }),
+    });
+  }
+
+  if (config.serverchan) {
+    jobs.push({
+      name: "Server酱",
+      url: `https://sctapi.ftqq.com/${encodeURIComponent(config.serverchan)}.send`,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`,
+    });
+  }
+
+  if (config.telegram_bot && config.telegram_chat) {
+    jobs.push({
+      name: "Telegram",
+      url: `https://api.telegram.org/bot${encodeURIComponent(config.telegram_bot)}/sendMessage`,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: config.telegram_chat, text: `${title}\n\n${content}`.slice(0, 4000) }),
+    });
+  }
+
+  if (!jobs.length) {
+    callback();
+    return;
+  }
+
+  let pending = jobs.length;
+  jobs.forEach((job) => {
+    rawRequest("POST", job, (error, response) => {
+      const status = responseStatus(response);
+      if (error || (status && (status < 200 || status >= 300))) {
+        console.log(`[GLaDOS] ${job.name} 远程通知发送失败`);
+      }
+      pending -= 1;
+      if (pending === 0) callback();
+    });
+  });
+}
+
+function finishWithNotification(subtitle, body, result) {
+  notify(subtitle, body);
+  const remoteContent = `${subtitle ? `${subtitle}\n` : ""}${body}`;
+  sendRemoteNotifications("GLaDOS 签到", remoteContent, () => done(result));
+}
+
+function responseStatus(response) {
+  return Number(response && (response.status || response.statusCode)) || 0;
+}
+
+function requestError(message, status) {
+  const error = new Error(message);
+  error.status = status || 0;
+  return error;
+}
+
+function normalizeRequestError(error) {
+  return error instanceof Error ? error : requestError(String(error || "网络请求失败"), 0);
+}
+
+function shouldRetry(error) {
+  return !error.status || error.status === 429 || error.status >= 500;
+}
+
+function requestWithRetry(method, options, callback, attempt) {
+  const currentAttempt = attempt || 1;
+  rawRequest(method, options, (rawError, response, body) => {
+    let error = rawError ? normalizeRequestError(rawError) : null;
+    const status = responseStatus(response);
+
+    if (!error && status && (status < 200 || status >= 300)) {
+      if (status === 401 || status === 403) {
+        error = requestError("登录凭据已失效", status);
+      } else if (status === 429) {
+        error = requestError("请求过于频繁（HTTP 429）", status);
+      } else if (status >= 500) {
+        error = requestError(`GLaDOS 服务暂时异常（HTTP ${status}）`, status);
+      } else {
+        error = requestError(`请求失败（HTTP ${status}）`, status);
+      }
+    }
+
+    if (error && currentAttempt < MAX_REQUEST_ATTEMPTS && shouldRetry(error)) {
+      return setTimeout(
+        () => requestWithRetry(method, options, callback, currentAttempt + 1),
+        RETRY_DELAY
+      );
+    }
+
+    callback(error, response, body);
+  });
 }
 
 function header(headers, name) {
@@ -50,14 +194,31 @@ function header(headers, name) {
 
 function parseJson(body) {
   try {
-    return JSON.parse(body || "{}");
+    const result = JSON.parse(body || "");
+    if (!result || typeof result !== "object" || Array.isArray(result)) {
+      throw new Error("响应不是 JSON 对象");
+    }
+    return result;
   } catch (error) {
-    return {};
+    throw new Error("GLaDOS 返回了无法解析的数据");
   }
 }
 
 function formatPoints(value) {
   return String(value).replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
+function maskEmail(email) {
+  const text = String(email || "");
+  const separator = text.lastIndexOf("@");
+  if (separator <= 0) {
+    return text || "未知账户";
+  }
+
+  const name = text.slice(0, separator);
+  const domain = text.slice(separator + 1);
+  const maskedName = name.length <= 2 ? "***" : `${name.slice(0, 2)}***${name.slice(-1)}`;
+  return `${maskedName}@${domain}`;
 }
 
 function originFromUrl(url) {
@@ -68,6 +229,14 @@ function originFromUrl(url) {
 function storedOrigin() {
   const origin = readStore(ORIGIN_KEY);
   return origin === "https://glados.network" || origin === "https://glados.rocks" ? origin : DEFAULT_ORIGIN;
+}
+
+function todayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function saveCookie() {
@@ -99,72 +268,162 @@ function saveCookie() {
   done();
 }
 
-function messageFromCheckin(result) {
-  if (result.message === "Please Try Tomorrow") {
-    return "今日已签到";
-  }
-  if (result.message === "oops, token error") {
-    return "Cookie 失效或 token 错误，请重新获取 Cookie";
-  }
-
-  const change = result.list && result.list[0] && result.list[0].change;
-  if (change !== undefined) {
-    const balance = result.list[0].balance;
-    const total = balance !== undefined ? `，共${formatPoints(balance)}积分` : "";
-    return `今日签到获得${formatPoints(change)}积分${total}`;
-  }
-
-  return result.message || "签到结果未知";
+function isLoginError(result) {
+  const message = String(result && result.message ? result.message : "").toLowerCase();
+  const code = Number(result && result.code);
+  return (
+    !result ||
+    code === -2 ||
+    message.includes("token error") ||
+    message.includes("not login") ||
+    message.includes("not logged") ||
+    message.includes("未登录")
+  );
 }
 
-function checkStatus(origin, cookie, authorization, checkinMessage) {
-  request(
+function isAlreadyCheckedIn(result) {
+  const message = String(result && result.message ? result.message : "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  const code = Number(result && result.code);
+  const points = Number(result && result.points);
+
+  return (
+    (code === 1 && Number.isFinite(points) && points === 0) ||
+    message.includes("please try tomorrow") ||
+    message.includes("today's observation logged") ||
+    message.includes("return tomorrow") ||
+    message.includes("already check") ||
+    message.includes("今日已签到") ||
+    message.includes("已经签到") ||
+    message.includes("明天再试")
+  );
+}
+
+function classifyCheckin(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    throw new Error("GLaDOS 返回的签到数据无效");
+  }
+
+  const record = result.list && result.list[0];
+  if (isLoginError(result)) {
+    return { kind: "login_expired", message: result.message || "登录状态已失效" };
+  }
+
+  if (isAlreadyCheckedIn(result)) {
+    const earned = record && record.change !== undefined
+      ? `今日签到获得${formatPoints(record.change)}积分`
+      : "";
+    const total = record && record.balance !== undefined
+      ? `当前共${formatPoints(record.balance)}积分`
+      : "";
+    const pointsText = [earned, total].filter(Boolean).join("，");
+    return {
+      kind: "already_checked",
+      message: `今日已签到。${pointsText ? `\n${pointsText}` : ""}`,
+    };
+  }
+
+  if (record && record.change !== undefined) {
+    const total = record.balance !== undefined ? `，共${formatPoints(record.balance)}积分` : "";
+    return {
+      kind: "success",
+      message: `签到成功！\n今日签到获得${formatPoints(record.change)}积分${total}`,
+    };
+  }
+
+  const code = Number(result.code);
+  const detail = String(result.message || "").trim();
+  if (code === 0 && /(?:success|成功)/i.test(detail)) {
+    return { kind: "success", message: `签到成功！${detail ? `\n${detail}` : ""}` };
+  }
+
+  throw new Error(`签到接口返回异常${detail ? `：${detail}` : ""}`);
+}
+
+function checkStatus(origin, cookie, authorization, checkin) {
+  requestWithRetry(
     "GET",
     {
       url: `${origin}/api/user/status`,
       headers: {
-        Cookie: cookie,
+        Cookie: cookie || "",
         Authorization: authorization || "",
       },
     },
     (error, response, body) => {
       if (error) {
-        notify("", `${checkinMessage}\n状态查询失败：${error}`);
-        return done({ status: "status_error", version: SCRIPT_VERSION, checkinMessage });
+        return finishWithNotification(
+          "",
+          `${checkin.message}\n账户状态查询失败，不影响本次签到：${error.message}`,
+          { status: "partial_success", version: SCRIPT_VERSION, checkinMessage: checkin.message }
+        );
       }
 
-      const status = parseJson(body);
+      let status;
+      try {
+        status = parseJson(body);
+      } catch (parseError) {
+        return finishWithNotification(
+          "",
+          `${checkin.message}\n账户状态查询失败，不影响本次签到：${parseError.message}`,
+          { status: "partial_success", version: SCRIPT_VERSION, checkinMessage: checkin.message }
+        );
+      }
+
       if (status.code !== 0 || !status.data) {
-        notify("", `${checkinMessage}\n状态查询失败，请重新登录获取 Cookie`);
-        return done({ status: "status_error", version: SCRIPT_VERSION, checkinMessage });
+        const detail = status.message ? `：${status.message}` : "";
+        return finishWithNotification(
+          "",
+          `${checkin.message}\n账户状态查询失败，不影响本次签到${detail}`,
+          { status: "partial_success", version: SCRIPT_VERSION, checkinMessage: checkin.message }
+        );
       }
 
-      const account = status.data.email || "未知账户";
-      const remaining = parseInt(status.data.leftDays, 10);
-      notify(`账户：${account}`, `${checkinMessage}\n剩余${remaining}天`);
-      done({ status: "ok", version: SCRIPT_VERSION, checkinMessage, remainingDays: remaining });
+      const account = maskEmail(status.data.email);
+      const remaining = Number.parseInt(status.data.leftDays, 10);
+      const remainingText = Number.isFinite(remaining) ? `\n剩余${remaining}天` : "";
+      finishWithNotification(
+        `账户：${account}`,
+        `${checkin.message}${remainingText}`,
+        {
+          status: checkin.kind === "already_checked" ? "already_checked" : "ok",
+          version: SCRIPT_VERSION,
+          checkinMessage: checkin.message,
+          remainingDays: Number.isFinite(remaining) ? remaining : null,
+        }
+      );
     }
   );
 }
 
 function checkin() {
+  const currentDate = todayKey();
+  if (readStore(LAST_SUCCESS_KEY) === currentDate) {
+    return done({ status: "skipped", reason: "already_succeeded_today", version: SCRIPT_VERSION });
+  }
+
   const cookie = readStore(COOKIE_KEY);
   const authorization = readStore(AUTH_KEY);
   const origin = storedOrigin();
 
   if (!cookie && !authorization) {
-    notify("", "请先登录 glados.network 或 glados.rocks 并刷新一次页面，让代理工具获取登录凭据");
-    return done({ status: "needs_cookie", version: SCRIPT_VERSION });
+    return finishWithNotification(
+      "",
+      "请先登录 glados.network 或 glados.rocks 并刷新一次页面，让代理工具获取登录凭据",
+      { status: "needs_cookie", version: SCRIPT_VERSION }
+    );
   }
 
-  request(
+  requestWithRetry(
     "POST",
     {
       url: `${origin}/api/user/checkin`,
       headers: {
         Accept: "application/json, text/plain, */*",
         Origin: origin,
-        Cookie: cookie,
+        Cookie: cookie || "",
         "Content-Type": "application/json;charset=utf-8",
         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
         Authorization: authorization || "",
@@ -173,12 +432,43 @@ function checkin() {
     },
     (error, response, body) => {
       if (error) {
-        notify("", `签到失败：${error}`);
-        return done({ status: "checkin_error", version: SCRIPT_VERSION });
+        if (error.status === 401 || error.status === 403) {
+          return finishWithNotification(
+            "",
+            "登录凭据已失效，请重新登录 GLaDOS 并刷新页面",
+            { status: "needs_cookie", version: SCRIPT_VERSION }
+          );
+        }
+        return finishWithNotification(
+          "",
+          `签到失败：${error.message}`,
+          { status: "checkin_error", version: SCRIPT_VERSION }
+        );
       }
 
-      const result = parseJson(body);
-      checkStatus(origin, cookie, authorization, messageFromCheckin(result));
+      let result;
+      let classified;
+      try {
+        result = parseJson(body);
+        classified = classifyCheckin(result);
+      } catch (parseOrApiError) {
+        return finishWithNotification(
+          "",
+          `签到失败：${parseOrApiError.message}`,
+          { status: "checkin_error", version: SCRIPT_VERSION }
+        );
+      }
+
+      if (classified.kind === "login_expired") {
+        return finishWithNotification(
+          "",
+          `${classified.message}，请重新登录 GLaDOS 并刷新页面`,
+          { status: "needs_cookie", version: SCRIPT_VERSION }
+        );
+      }
+
+      writeStore(currentDate, LAST_SUCCESS_KEY);
+      checkStatus(origin, cookie, authorization, classified);
     }
   );
 }
