@@ -1,6 +1,6 @@
 {
   "name": "glados-auto-checkin",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "scripts": {
     "test": "node test-glados-surge.js && node test-glados-scriptcat.js"

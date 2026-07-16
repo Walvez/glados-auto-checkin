@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS 自动签到（脚本猫）
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.2.0
+// @version      1.2.1
 // @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico

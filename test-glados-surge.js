@@ -5,6 +5,34 @@ const vm = require("vm");
 
 const scriptPath = path.join(__dirname, "glados.autosign.surge.js");
 
+function testReleaseVersionReferences() {
+  const version = require("./package.json").version;
+  const files = [
+    "Surge/glados-auto-checkin.sgmodule",
+    "QuantumultX/glados-auto-checkin.snippet",
+    "README.md",
+  ];
+
+  files.forEach((file) => {
+    const content = fs.readFileSync(path.join(__dirname, file), "utf8");
+    const referencedVersions = Array.from(
+      content.matchAll(/glados-auto-checkin\/v(\d+\.\d+\.\d+)\//g),
+      (match) => match[1]
+    );
+    assert.ok(referencedVersions.length > 0, `${file} 应包含固定版本安装地址`);
+    referencedVersions.forEach((referencedVersion) => {
+      assert.equal(referencedVersion, version, `${file} 的安装地址版本应与 package.json 一致`);
+    });
+  });
+
+  const scriptCat = fs.readFileSync(
+    path.join(__dirname, "glados.auto-checkin.scriptcat.user.js"),
+    "utf8"
+  );
+  const scriptCatVersion = scriptCat.match(/@version\s+(\d+\.\d+\.\d+)/)?.[1];
+  assert.equal(scriptCatVersion, version, "ScriptCat 版本应与 package.json 一致");
+}
+
 function runScript(extraContext) {
   const script = fs.readFileSync(scriptPath, "utf8");
   const notifications = [];
@@ -495,6 +523,7 @@ async function testQuantumultXReadsNotificationConfigFromSourcePath() {
 const resultNotifications = [];
 
 (async () => {
+  testReleaseVersionReferences();
   await testCaptureCookie();
   await testCaptureNetworkDomain();
   await testCaptureCookieFromAnyGladosRequest();
