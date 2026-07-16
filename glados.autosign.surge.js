@@ -34,45 +34,6 @@ function writeStore(value, key) {
     : $prefs.setValueForKey(value, key);
 }
 
-function decodeParameter(value) {
-  try {
-    return decodeURIComponent(String(value || "").replace(/\+/g, " "));
-  } catch (error) {
-    return String(value || "");
-  }
-}
-
-function parseParameterString(source) {
-  const result = {};
-  String(source || "")
-    .replace(/^[?#]/, "")
-    .split("&")
-    .forEach((part) => {
-      if (!part) return;
-      const separator = part.indexOf("=");
-      const key = decodeParameter(separator >= 0 ? part.slice(0, separator) : part);
-      const value = decodeParameter(separator >= 0 ? part.slice(separator + 1) : "");
-      if (key) result[key] = value;
-    });
-  return result;
-}
-
-function notificationConfig() {
-  if (typeof $argument !== "undefined" && $argument) {
-    return parseParameterString($argument);
-  }
-
-  if (typeof $environment !== "undefined" && $environment && $environment.sourcePath) {
-    const sourcePath = String($environment.sourcePath);
-    const hashIndex = sourcePath.indexOf("#");
-    if (hashIndex >= 0) {
-      return parseParameterString(sourcePath.slice(hashIndex + 1));
-    }
-  }
-
-  return {};
-}
-
 function rawRequest(method, options, callback) {
   if (typeof $httpClient !== "undefined") {
     return $httpClient[method.toLowerCase()](options, callback);
@@ -84,59 +45,9 @@ function rawRequest(method, options, callback) {
     .catch((error) => callback(error.error || error.message || String(error)));
 }
 
-function sendRemoteNotifications(title, content, callback) {
-  const config = notificationConfig();
-  const jobs = [];
-
-  if (config.pushdeer) {
-    jobs.push({
-      name: "PushDeer",
-      url: "https://api2.pushdeer.com/message/push",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pushkey: config.pushdeer, text: `${title}\n\n${content}`, type: "text" }),
-    });
-  }
-
-  if (config.serverchan) {
-    jobs.push({
-      name: "Server酱",
-      url: `https://sctapi.ftqq.com/${encodeURIComponent(config.serverchan)}.send`,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`,
-    });
-  }
-
-  if (config.telegram_bot && config.telegram_chat) {
-    jobs.push({
-      name: "Telegram",
-      url: `https://api.telegram.org/bot${encodeURIComponent(config.telegram_bot)}/sendMessage`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: config.telegram_chat, text: `${title}\n\n${content}`.slice(0, 4000) }),
-    });
-  }
-
-  if (!jobs.length) {
-    callback();
-    return;
-  }
-
-  let pending = jobs.length;
-  jobs.forEach((job) => {
-    rawRequest("POST", job, (error, response) => {
-      const status = responseStatus(response);
-      if (error || (status && (status < 200 || status >= 300))) {
-        console.log(`[GLaDOS] ${job.name} 远程通知发送失败`);
-      }
-      pending -= 1;
-      if (pending === 0) callback();
-    });
-  });
-}
-
 function finishWithNotification(subtitle, body, result) {
   notify(subtitle, body);
-  const remoteContent = `${subtitle ? `${subtitle}\n` : ""}${body}`;
-  sendRemoteNotifications("GLaDOS 签到", remoteContent, () => done(result));
+  done(result);
 }
 
 function responseStatus(response) {

@@ -5,25 +5,38 @@ const vm = require("vm");
 
 const scriptPath = path.join(__dirname, "glados.autosign.surge.js");
 
-function testReleaseVersionReferences() {
+function testStableResourceReferencesAndNotificationBoundary() {
   const version = require("./package.json").version;
   const files = [
     "Surge/glados-auto-checkin.sgmodule",
     "QuantumultX/glados-auto-checkin.snippet",
     "README.md",
   ];
+  const stablePrefix = "https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/heads/main/";
 
   files.forEach((file) => {
     const content = fs.readFileSync(path.join(__dirname, file), "utf8");
-    const referencedVersions = Array.from(
-      content.matchAll(/glados-auto-checkin\/v(\d+\.\d+\.\d+)\//g),
-      (match) => match[1]
-    );
-    assert.ok(referencedVersions.length > 0, `${file} 应包含固定版本安装地址`);
-    referencedVersions.forEach((referencedVersion) => {
-      assert.equal(referencedVersion, version, `${file} 的安装地址版本应与 package.json 一致`);
+    const projectRawUrls = content.match(
+      /https:\/\/raw\.githubusercontent\.com\/Walvez\/glados-auto-checkin\/[^\s'"`)]+/g
+    ) || [];
+    assert.ok(projectRawUrls.length > 0, `${file} 应包含项目 Raw 地址`);
+    projectRawUrls.forEach((url) => {
+      assert.ok(url.startsWith(stablePrefix), `${file} 应使用固定 main 地址`);
     });
+    assert.doesNotMatch(content, /glados-auto-checkin\/v\d+\.\d+\.\d+\//);
   });
+
+  const module = fs.readFileSync(
+    path.join(__dirname, "Surge/glados-auto-checkin.sgmodule"),
+    "utf8"
+  );
+  assert.doesNotMatch(module, /#!arguments=|\bargument=|pushdeer|serverchan|telegram/i);
+
+  const proxyScript = fs.readFileSync(scriptPath, "utf8");
+  assert.doesNotMatch(
+    proxyScript,
+    /api2\.pushdeer\.com|sctapi\.ftqq\.com|api\.telegram\.org|\$argument|sourcePath/
+  );
 
   const scriptCat = fs.readFileSync(
     path.join(__dirname, "glados.auto-checkin.scriptcat.user.js"),
@@ -449,81 +462,10 @@ async function testSecondRunTodaySkipsSilently() {
   assert.equal(result.notifications.length, 0);
 }
 
-async function testOptionalTelegramNotificationDoesNotLeakCredentials() {
-  const requests = [];
-  const result = await runScript({
-    store: {
-      evil_gladoscookie: "session=private-cookie",
-      evil_galdosauthorization: "Bearer private-token",
-    },
-    $argument: "telegram_bot=bot-token&telegram_chat=12345",
-    $httpClient: {
-      post: (options, callback) => {
-        requests.push(options);
-        if (options.url.includes("/api/user/checkin")) {
-          callback(null, { status: 200 }, JSON.stringify({ list: [{ change: 3, balance: 30 }] }));
-        } else {
-          callback(null, { status: 200 }, JSON.stringify({ ok: true }));
-        }
-      },
-      get: (options, callback) => {
-        requests.push(options);
-        callback(
-          null,
-          { status: 200 },
-          JSON.stringify({ code: 0, data: { email: "user@example.com", leftDays: 30 } })
-        );
-      },
-    },
-  });
-
-  assert.equal(result.doneValue.status, "ok");
-  assert.equal(requests.length, 3);
-  assert.match(requests[2].url, /^https:\/\/api\.telegram\.org\/bot/);
-  assert.equal(requests[2].headers.Cookie, undefined);
-  assert.doesNotMatch(requests[2].body, /private-cookie|private-token|user@example\.com/);
-  assert.match(requests[2].body, /us\*\*\*r@example\.com/);
-}
-
-async function testQuantumultXReadsNotificationConfigFromSourcePath() {
-  const requests = [];
-  const responses = [
-    { statusCode: 200, body: JSON.stringify({ list: [{ change: 3, balance: 30 }] }) },
-    { statusCode: 200, body: JSON.stringify({ code: 0, data: { email: "qx@example.com", leftDays: 30 } }) },
-    { statusCode: 200, body: JSON.stringify({ code: 0 }) },
-  ];
-  const result = await runScript({
-    store: { evil_gladoscookie: "session=private-cookie" },
-    $persistentStore: undefined,
-    $notification: undefined,
-    $environment: {
-      sourcePath: "https://example.com/glados.js#pushdeer=push-key",
-    },
-    $prefs: {
-      valueForKey: (key) => ({ evil_gladoscookie: "session=private-cookie" })[key] || null,
-      setValueForKey: () => true,
-    },
-    $notify: () => {},
-    $task: {
-      fetch: async (options) => {
-        requests.push(options);
-        return responses.shift();
-      },
-    },
-  });
-
-  assert.equal(result.doneValue.status, "ok");
-  assert.equal(requests.length, 3);
-  assert.equal(requests[2].url, "https://api2.pushdeer.com/message/push");
-  assert.equal(requests[2].headers.Cookie, undefined);
-  assert.doesNotMatch(requests[2].body, /private-cookie|qx@example\.com/);
-  assert.match(requests[2].body, /\*\*\*@example\.com/);
-}
-
 const resultNotifications = [];
 
 (async () => {
-  testReleaseVersionReferences();
+  testStableResourceReferencesAndNotificationBoundary();
   await testCaptureCookie();
   await testCaptureNetworkDomain();
   await testCaptureCookieFromAnyGladosRequest();
@@ -540,8 +482,6 @@ const resultNotifications = [];
   await testHttp403NeedsCookieWithoutRetry();
   await testStatusFailureIsPartialSuccess();
   await testSecondRunTodaySkipsSilently();
-  await testOptionalTelegramNotificationDoesNotLeakCredentials();
-  await testQuantumultXReadsNotificationConfigFromSourcePath();
   console.log("glados surge tests passed");
 })().catch((error) => {
   console.error(error);

@@ -1,6 +1,6 @@
 # GLaDOS 自动签到（Chrome / Edge / Surge / Quantumult X）
 
-本项目提供三种独立的 GLaDOS 自动签到方式：Chrome / Edge 浏览器使用 ScriptCat（脚本猫）脚本管理器，Surge 使用模块，Quantumult X 使用重写规则与定时任务。所有版本都支持 `glados.network` 和 `glados.rocks`。默认只访问 GLaDOS 官方接口；只有用户主动配置远程通知后，才会把已脱敏的签到摘要发送到对应通知平台。
+本项目提供三种独立的 GLaDOS 自动签到方式：Chrome / Edge 浏览器使用 ScriptCat（脚本猫）脚本管理器，Surge 使用模块，Quantumult X 使用重写规则与定时任务。所有版本都支持 `glados.network` 和 `glados.rocks`。Surge 与 Quantumult X 只使用应用自带通知，不连接第三方通知平台；ScriptCat 可由用户选择是否启用远程通知。
 
 ## 选择安装方式
 
@@ -95,12 +95,12 @@ https://scriptcat.org/zh-CN/script-show-page/7014
 在 Surge 中打开“模块”，选择“从 URL 安装”，粘贴：
 
 ```text
-https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.1/Surge/glados-auto-checkin.sgmodule
+https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/heads/main/Surge/glados-auto-checkin.sgmodule
 ```
 
 启用模块，并确认 Surge 的“脚本”“重写”和“MITM”功能已开启。首次使用 MITM 时，需要先安装并信任 Surge CA 证书。
 
-如需远程通知，可在 Surge 的模块参数中填写 `pushdeer`、`serverchan`、`telegram_bot` 和 `telegram_chat`。所有字段默认为空，可同时填写多个渠道。
+此地址固定跟随项目的 `main` 分支，以后更新模块时继续使用同一个 URL，无需为新版本重新复制 Raw 地址。模块没有配置参数，签到结果直接使用 Surge 自带通知。
 
 ### 2. 获取登录凭据
 
@@ -110,13 +110,14 @@ Cookie 更新后，重新登录或刷新页面即可让 Surge 自动更新本地
 
 ### 3. 手动测试
 
-Surge Mac 可在终端运行：
+`surge-cli script evaluate` 只接受本地文件路径，不能直接使用远程模块中的脚本名称。需要立即测试时，可先下载当前脚本，再执行：
 
 ```bash
-/Applications/Surge.app/Contents/Applications/surge-cli script evaluate glados.autosign.surge.js cron 20
+curl -fsSL 'https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/heads/main/glados.autosign.surge.js' -o /tmp/glados.autosign.surge.js
+/Applications/Surge.app/Contents/Applications/surge-cli script evaluate /tmp/glados.autosign.surge.js cron 20
 ```
 
-命令中的文件名需要替换为脚本在本机的实际路径。若使用远程模块且没有本地脚本文件，可等待下一次定时任务触发，并在 Surge 的脚本日志中查看结果。
+也可以不手动测试，等待下一次定时任务触发，并在 Surge 的脚本日志中查看结果。
 
 ## Quantumult X（重写 + 定时任务方式）
 
@@ -125,28 +126,20 @@ Surge Mac 可在终端运行：
 进入“重写”资源，添加以下 URL 并启用：
 
 ```text
-https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.1/QuantumultX/glados-auto-checkin.snippet
+https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/heads/main/QuantumultX/glados-auto-checkin.snippet
 ```
 
-确认 Quantumult X 已启用重写和 MitM，并已安装、信任 MitM 证书。
+确认 Quantumult X 已启用重写和 MitM，并已安装、信任 MitM 证书。该地址固定跟随 `main` 分支，以后继续更新同一个资源即可。
 
 ### 2. 添加定时任务
 
 在配置文件的 `[task_local]` 段加入：
 
 ```ini
-15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.1/glados.autosign.surge.js, tag=GLaDOS签到, enabled=true
+15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/heads/main/glados.autosign.surge.js, tag=GLaDOS签到, enabled=true
 ```
 
-如果使用可视化界面，也可以在“定时任务”中添加同一个脚本 URL，Cron 表达式填写 `15 7,15 * * *`。
-
-如需远程通知，在脚本 URL 后使用 `#` 追加本地参数：
-
-```ini
-15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.1/glados.autosign.surge.js#pushdeer=YOUR_KEY&serverchan=YOUR_KEY&telegram_bot=YOUR_TOKEN&telegram_chat=YOUR_CHAT_ID, tag=GLaDOS签到, enabled=true
-```
-
-只保留实际使用的参数。`#` 后内容不会发送给 GitHub，但会保存在你的 Quantumult X 本地配置中，请勿公开分享该配置。
+如果使用可视化界面，也可以在“定时任务”中添加同一个脚本 URL，Cron 表达式填写 `15 7,15 * * *`。此 URL 同样固定跟随 `main` 分支；Quantumult X 只使用应用自带通知，不需要附加通知参数。
 
 ### 3. 获取登录凭据并测试
 
@@ -176,9 +169,9 @@ Surge 用户需要下载模块并修改 `cronexp` 后作为本地模块安装；
 
 不会。浏览器版本由 ScriptCat 使用浏览器现有登录状态；Surge / Quantumult X 版本只把 Cookie、Authorization 和实际登录域名保存在代理工具的本地持久化存储中，并仅发送给对应的 GLaDOS 官方域名。请勿公开代理工具的配置文件、运行日志或持久化数据。
 
-### 远程通知会发送什么
+### 通知会发送什么
 
-只发送脱敏邮箱、签到结果、积分和剩余天数。远程请求不携带 GLaDOS Cookie 或 Authorization。远程通知发送失败也不会把已成功的签到改判为失败。
+Surge 与 Quantumult X 只使用应用自带通知，不请求 PushDeer、Server酱、Telegram 等第三方通知接口。ScriptCat 用户主动启用远程通知后，只发送脱敏邮箱、签到结果、积分和剩余天数；远程请求不携带 GLaDOS Cookie 或 Authorization。
 
 ## 开发
 
@@ -188,11 +181,11 @@ Surge 用户需要下载模块并修改 `cronexp` 后作为本地模块安装；
 npm test
 ```
 
-提交和拉取请求会由 GitHub Actions 自动运行同一套测试。测试覆盖双域名、Surge / Quantumult X 运行时、已签到响应、无效 JSON、401/403、429 重试、5xx 部分成功、当日跳过和远程通知凭据隔离。
+提交和拉取请求会由 GitHub Actions 自动运行同一套测试。测试覆盖双域名、Surge / Quantumult X 运行时、已签到响应、无效 JSON、401/403、429 重试、5xx 部分成功、当日跳过、固定更新地址和通知边界。
 
 ### 发布建议
 
-正式安装 URL 固定到当前版本标签（本版为 `v1.2.1`），不会因 `main` 上的后续开发提交而自动变化。发布新版本时，应先确认 CI 通过，更新这些安装地址与版本号，再创建对应的语义化版本标签。
+Surge 模块、Quantumult X snippet 和定时脚本均固定使用 `refs/heads/main` 地址。发布新版本时不再修改安装 URL；用户更新原资源即可获取新代码。语义化版本标签仅用于保留发布快照。
 
 ## 免责声明
 
