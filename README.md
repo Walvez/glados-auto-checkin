@@ -84,7 +84,7 @@ https://scriptcat.org/zh-CN/script-show-page/7014
 在 Surge 中打开“模块”，选择“从 URL 安装”，粘贴：
 
 ```text
-https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/Surge/glados-auto-checkin.sgmodule
+https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/Surge/glados-auto-checkin.sgmodule
 ```
 
 启用模块，并确认 Surge 的“脚本”“重写”和“MITM”功能已开启。首次使用 MITM 时，需要先安装并信任 Surge CA 证书。
@@ -114,7 +114,7 @@ Surge Mac 可在终端运行：
 进入“重写”资源，添加以下 URL 并启用：
 
 ```text
-https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/QuantumultX/glados-auto-checkin.snippet
+https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/QuantumultX/glados-auto-checkin.snippet
 ```
 
 确认 Quantumult X 已启用重写和 MitM，并已安装、信任 MitM 证书。
@@ -124,7 +124,7 @@ https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/QuantumultX/gl
 在配置文件的 `[task_local]` 段加入：
 
 ```ini
-15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/glados.autosign.surge.js, tag=GLaDOS签到, enabled=true
+15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/glados.autosign.surge.js, tag=GLaDOS签到, enabled=true
 ```
 
 如果使用可视化界面，也可以在“定时任务”中添加同一个脚本 URL，Cron 表达式填写 `15 7,15 * * *`。
@@ -132,7 +132,7 @@ https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/QuantumultX/gl
 如需远程通知，在脚本 URL 后使用 `#` 追加本地参数：
 
 ```ini
-15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/glados.autosign.surge.js#pushdeer=YOUR_KEY&serverchan=YOUR_KEY&telegram_bot=YOUR_TOKEN&telegram_chat=YOUR_CHAT_ID, tag=GLaDOS签到, enabled=true
+15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/glados.autosign.surge.js#pushdeer=YOUR_KEY&serverchan=YOUR_KEY&telegram_bot=YOUR_TOKEN&telegram_chat=YOUR_CHAT_ID, tag=GLaDOS签到, enabled=true
 ```
 
 只保留实际使用的参数。`#` 后内容不会发送给 GitHub，但会保存在你的 Quantumult X 本地配置中，请勿公开分享该配置。
@@ -181,7 +181,7 @@ npm test
 
 ### 发布建议
 
-仓库当前的安装 URL 跟随 `main`，方便快速更新。准备正式发布时，建议先确认 CI 通过，再创建语义化版本标签（例如 `v1.1.0`），并为需要稳定更新节奏的用户提供固定到该标签的 URL。在标签真正发布前，不要把默认 URL 改成一个尚不存在的版本地址。
+正式安装 URL 固定到 `v1.1.0`，不会因 `main` 上的后续开发提交而自动变化。发布新版本时，应先确认 CI 通过，更新这些安装地址与版本号，再创建对应的语义化版本标签。
 
 ## 免责声明
 

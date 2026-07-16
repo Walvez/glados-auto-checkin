@@ -3,8 +3,8 @@
 #!arguments=pushdeer=&serverchan=&telegram_bot=&telegram_chat=
 
 [Script]
-GLaDOS签到 = type=cron,cronexp="15 7,15 * * *",wake-system=1,timeout=30,argument="pushdeer=%pushdeer%&serverchan=%serverchan%&telegram_bot=%telegram_bot%&telegram_chat=%telegram_chat%",script-path=https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/glados.autosign.surge.js
-获取GLaDOS登录凭据 = type=http-request,pattern=^https:\/\/glados\.(network|rocks)\/,script-path=https://raw.githubusercontent.com/Walvez/glados-auto-checkin/main/glados.autosign.surge.js
+GLaDOS签到 = type=cron,cronexp="15 7,15 * * *",wake-system=1,timeout=30,argument="pushdeer=%pushdeer%&serverchan=%serverchan%&telegram_bot=%telegram_bot%&telegram_chat=%telegram_chat%",script-path=https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/glados.autosign.surge.js
+获取GLaDOS登录凭据 = type=http-request,pattern=^https:\/\/glados\.(network|rocks)\/,script-path=https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/glados.autosign.surge.js
 
 [MITM]
 hostname = %APPEND% glados.network, glados.rocks
