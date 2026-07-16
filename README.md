@@ -39,9 +39,9 @@
 
 | 使用环境 | 推荐场景 | MitM | 安装入口 |
 | :--- | :--- | :---: | :--- |
-| **Chrome / Edge** | 希望安装简单、浏览器后台自动运行 | 不需要 | [安装 ScriptCat 脚本](https://scriptcat.org/zh-CN/script-show-page/7014) |
-| **Surge** | 日常已使用 Surge 接管网络 | 需要 | [复制模块地址](#surge) |
-| **Quantumult X** | 日常已使用 Quantumult X | 需要 | [查看配置步骤](#quantumult-x) |
+| **Chrome / Edge** | 希望安装简单、浏览器后台自动运行 | 不需要 | [查看安装步骤](#chrome--edge) |
+| **Surge** | 日常已使用 Surge 接管网络 | 需要 | [查看安装步骤](#surge) |
+| **Quantumult X** | 日常已使用 Quantumult X | 需要 | [查看安装步骤](#quantumult-x) |
 
 ### Chrome / Edge
 

@@ -39,8 +39,8 @@ Choose one method for your environment. You do not need to install all three.
 
 | Environment | Best for | MitM | Install |
 | :--- | :--- | :---: | :--- |
-| **Chrome / Edge** | Simple setup and background browser automation | No | [Install the ScriptCat script](https://scriptcat.org/en/script-show-page/7014) |
-| **Surge** | Users who already route traffic through Surge | Yes | [Copy the module URL](#surge) |
+| **Chrome / Edge** | Simple setup and background browser automation | No | [View setup](#chrome--edge) |
+| **Surge** | Users who already route traffic through Surge | Yes | [View setup](#surge) |
 | **Quantumult X** | Users who already route traffic through Quantumult X | Yes | [View setup](#quantumult-x) |
 
 ### Chrome / Edge
