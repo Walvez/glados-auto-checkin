@@ -75,7 +75,18 @@ https://scriptcat.org/zh-CN/script-show-page/7014
 
 ### 可选：远程通知
 
-在脚本猫的脚本菜单中，可分别配置 PushDeer、Server酱和 Telegram。多个渠道可同时开启；留空并保存即关闭对应渠道。密钥保存在脚本猫本地存储中。
+在脚本猫的脚本菜单中，可配置以下远程通知渠道：
+
+- PushDeer
+- Server酱
+- Telegram
+- 企业微信群机器人
+- 钉钉群机器人
+- 飞书群机器人
+- PushMe
+- Bark
+
+多个渠道可同时开启；留空并保存即关闭对应渠道。企业微信、钉钉和飞书既可填写 Key / Token，也可粘贴完整 Webhook URL；脚本只会提取凭据并请求对应平台的固定官方域名。钉钉机器人如果启用了自定义关键词，请将关键词设为 `GLaDOS`。密钥保存在脚本猫本地存储中，可通过“测试远程通知”菜单检查配置。
 
 ## Surge（模块方式）
 
@@ -84,7 +95,7 @@ https://scriptcat.org/zh-CN/script-show-page/7014
 在 Surge 中打开“模块”，选择“从 URL 安装”，粘贴：
 
 ```text
-https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/Surge/glados-auto-checkin.sgmodule
+https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.0/Surge/glados-auto-checkin.sgmodule
 ```
 
 启用模块，并确认 Surge 的“脚本”“重写”和“MITM”功能已开启。首次使用 MITM 时，需要先安装并信任 Surge CA 证书。
@@ -114,7 +125,7 @@ Surge Mac 可在终端运行：
 进入“重写”资源，添加以下 URL 并启用：
 
 ```text
-https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/QuantumultX/glados-auto-checkin.snippet
+https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.0/QuantumultX/glados-auto-checkin.snippet
 ```
 
 确认 Quantumult X 已启用重写和 MitM，并已安装、信任 MitM 证书。
@@ -124,7 +135,7 @@ https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/QuantumultX/
 在配置文件的 `[task_local]` 段加入：
 
 ```ini
-15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/glados.autosign.surge.js, tag=GLaDOS签到, enabled=true
+15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.0/glados.autosign.surge.js, tag=GLaDOS签到, enabled=true
 ```
 
 如果使用可视化界面，也可以在“定时任务”中添加同一个脚本 URL，Cron 表达式填写 `15 7,15 * * *`。
@@ -132,7 +143,7 @@ https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/QuantumultX/
 如需远程通知，在脚本 URL 后使用 `#` 追加本地参数：
 
 ```ini
-15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.1.0/glados.autosign.surge.js#pushdeer=YOUR_KEY&serverchan=YOUR_KEY&telegram_bot=YOUR_TOKEN&telegram_chat=YOUR_CHAT_ID, tag=GLaDOS签到, enabled=true
+15 7,15 * * * https://raw.githubusercontent.com/Walvez/glados-auto-checkin/v1.2.0/glados.autosign.surge.js#pushdeer=YOUR_KEY&serverchan=YOUR_KEY&telegram_bot=YOUR_TOKEN&telegram_chat=YOUR_CHAT_ID, tag=GLaDOS签到, enabled=true
 ```
 
 只保留实际使用的参数。`#` 后内容不会发送给 GitHub，但会保存在你的 Quantumult X 本地配置中，请勿公开分享该配置。

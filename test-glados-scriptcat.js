@@ -17,6 +17,7 @@ async function runScript(responses, extraContext = {}) {
   const requests = [];
 
   const context = {
+    URL,
     setTimeout: (callback) => {
       callback();
       return 0;
@@ -243,11 +244,65 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
   assert.match(result.requests[2].data, /us\*\*\*r@example\.com/);
 }
 
+async function testAdditionalRemoteNotificationChannels() {
+  const values = {
+    glados_notify_wecom: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=wecom-key",
+    glados_notify_dingtalk: "https://oapi.dingtalk.com/robot/send?access_token=dingtalk-token",
+    glados_notify_feishu: "https://open.feishu.cn/open-apis/bot/v2/hook/feishu-key",
+    glados_notify_pushme: "https://push.i-i.me/?push_key=pushme-key",
+    glados_notify_bark: "https://api.day.app/bark-key",
+  };
+  const result = await runScript(
+    [
+      response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+      response({ list: [{ change: 3, balance: 30 }] }),
+      response({ code: 0 }),
+      response({ code: 0 }),
+      response({ code: 0 }),
+      response({ code: 0 }),
+      response({ code: 0 }),
+    ],
+    {
+      GM_getValue: async (key, fallback) => values[key] || fallback,
+    }
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.requests.length, 7);
+  const remote = result.requests.slice(2);
+  assert.deepEqual(
+    remote.map((item) => item.url),
+    [
+      "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=wecom-key",
+      "https://oapi.dingtalk.com/robot/send?access_token=dingtalk-token",
+      "https://open.feishu.cn/open-apis/bot/v2/hook/feishu-key",
+      "https://push.i-i.me/?push_key=pushme-key",
+      "https://api.day.app/bark-key",
+    ]
+  );
+  remote.forEach((item) => {
+    assert.equal(item.anonymous, true);
+    assert.equal(item.headers.Cookie, undefined);
+    assert.doesNotMatch(item.data, /user@example\.com/);
+    assert.match(item.data, /us\*\*\*r@example\.com/);
+  });
+  assert.match(remote[0].data, /"msgtype":"text"/);
+  assert.match(remote[1].data, /"msgtype":"markdown"/);
+  assert.match(remote[2].data, /"msg_type":"text"/);
+  assert.match(remote[3].data, /"type":"markdown"/);
+  assert.match(remote[4].data, /"group":"GLaDOS"/);
+}
+
 (async () => {
   assert.match(script, /@crontab\s+5-55\/5 \* once \* \*/);
   assert.doesNotMatch(script, /evil_gladoscookie|evil_galdosauthorization/);
   assert.match(script, /@connect\s+glados\.network/);
   assert.match(script, /@connect\s+glados\.rocks/);
+  assert.match(script, /@connect\s+qyapi\.weixin\.qq\.com/);
+  assert.match(script, /@connect\s+oapi\.dingtalk\.com/);
+  assert.match(script, /@connect\s+open\.feishu\.cn/);
+  assert.match(script, /@connect\s+push\.i-i\.me/);
+  assert.match(script, /@connect\s+api\.day\.app/);
   await testSuccessfulCheckin();
   await testFallsBackToRocksLogin();
   await testAlreadyCheckedIn();
@@ -261,6 +316,7 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
   await testHttp403PromptsLoginWithoutRetry();
   await testExplicitSuccessWithoutPointRecord();
   await testOptionalPushDeerNotificationDoesNotLeakCredentials();
+  await testAdditionalRemoteNotificationChannels();
   console.log("glados scriptcat tests passed");
 })().catch((error) => {
   console.error(error);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS 自动签到（脚本猫）
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.1.0
+// @version      1.2.0
 // @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -18,6 +18,11 @@
 // @connect      api2.pushdeer.com
 // @connect      sctapi.ftqq.com
 // @connect      api.telegram.org
+// @connect      qyapi.weixin.qq.com
+// @connect      oapi.dingtalk.com
+// @connect      open.feishu.cn
+// @connect      push.i-i.me
+// @connect      api.day.app
 // @license      MIT
 // @tag          GLaDOS
 // @tag          自动签到
@@ -37,6 +42,11 @@ const NOTIFY_KEYS = {
   serverchan: "glados_notify_serverchan",
   telegramBot: "glados_notify_telegram_bot",
   telegramChat: "glados_notify_telegram_chat",
+  wecom: "glados_notify_wecom",
+  dingtalk: "glados_notify_dingtalk",
+  feishu: "glados_notify_feishu",
+  pushme: "glados_notify_pushme",
+  bark: "glados_notify_bark",
 };
 
 function log(message, level = "info") {
@@ -118,15 +128,57 @@ async function storedValue(key) {
   return String((await GM_getValue(key, "")) || "").trim();
 }
 
+function queryCredential(value, parameter) {
+  const text = String(value || "").trim();
+  if (!/^https?:\/\//i.test(text)) return text;
+  try {
+    return new URL(text).searchParams.get(parameter) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function pathCredential(value, marker) {
+  const text = String(value || "").trim();
+  if (!/^https?:\/\//i.test(text)) return text;
+  try {
+    const pathname = new URL(text).pathname;
+    const index = pathname.indexOf(marker);
+    return index >= 0 ? decodeURIComponent(pathname.slice(index + marker.length).split("/")[0] || "") : "";
+  } catch (error) {
+    return "";
+  }
+}
+
 async function sendRemoteNotifications(title, content) {
   if (typeof GM_getValue !== "function") return;
 
-  const [pushdeer, serverchan, telegramBot, telegramChat] = await Promise.all([
+  const [
+    pushdeer,
+    serverchan,
+    telegramBot,
+    telegramChat,
+    wecomInput,
+    dingtalkInput,
+    feishuInput,
+    pushmeInput,
+    barkInput,
+  ] = await Promise.all([
     storedValue(NOTIFY_KEYS.pushdeer),
     storedValue(NOTIFY_KEYS.serverchan),
     storedValue(NOTIFY_KEYS.telegramBot),
     storedValue(NOTIFY_KEYS.telegramChat),
+    storedValue(NOTIFY_KEYS.wecom),
+    storedValue(NOTIFY_KEYS.dingtalk),
+    storedValue(NOTIFY_KEYS.feishu),
+    storedValue(NOTIFY_KEYS.pushme),
+    storedValue(NOTIFY_KEYS.bark),
   ]);
+  const wecom = queryCredential(wecomInput, "key");
+  const dingtalk = queryCredential(dingtalkInput, "access_token");
+  const feishu = pathCredential(feishuInput, "/open-apis/bot/v2/hook/");
+  const pushme = queryCredential(pushmeInput, "push_key");
+  const bark = pathCredential(barkInput, "/");
   const jobs = [];
 
   if (pushdeer) {
@@ -165,12 +217,83 @@ async function sendRemoteNotifications(title, content) {
     });
   }
 
+  if (wecom) {
+    jobs.push({
+      name: "企业微信",
+      request: remoteRequest({
+        method: "POST",
+        url: `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${encodeURIComponent(wecom)}`,
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        data: JSON.stringify({ msgtype: "text", text: { content: `${title}\n${content}` } }),
+      }),
+    });
+  }
+
+  if (dingtalk) {
+    jobs.push({
+      name: "钉钉",
+      request: remoteRequest({
+        method: "POST",
+        url: `https://oapi.dingtalk.com/robot/send?access_token=${encodeURIComponent(dingtalk)}`,
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        data: JSON.stringify({
+          msgtype: "markdown",
+          markdown: { title, text: `# ${title}\n\n${content}` },
+        }),
+      }),
+    });
+  }
+
+  if (feishu) {
+    jobs.push({
+      name: "飞书",
+      request: remoteRequest({
+        method: "POST",
+        url: `https://open.feishu.cn/open-apis/bot/v2/hook/${encodeURIComponent(feishu)}`,
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        data: JSON.stringify({ msg_type: "text", content: { text: `${title}\n${content}` } }),
+      }),
+    });
+  }
+
+  if (pushme) {
+    jobs.push({
+      name: "PushMe",
+      request: remoteRequest({
+        method: "POST",
+        url: `https://push.i-i.me/?push_key=${encodeURIComponent(pushme)}`,
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        data: JSON.stringify({ type: "markdown", title, content }),
+      }),
+    });
+  }
+
+  if (bark) {
+    jobs.push({
+      name: "Bark",
+      request: remoteRequest({
+        method: "POST",
+        url: `https://api.day.app/${encodeURIComponent(bark)}`,
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        data: JSON.stringify({
+          title,
+          body: content,
+          group: "GLaDOS",
+          icon: "https://glados.network/favicon.ico",
+        }),
+      }),
+    });
+  }
+
   const results = await Promise.allSettled(jobs.map((job) => job.request));
+  let failed = 0;
   results.forEach((result, index) => {
     if (result.status === "rejected") {
+      failed += 1;
       log(`${jobs[index].name} 远程通知发送失败：${result.reason.message}`, "warn");
     }
   });
+  return { configured: jobs.length, succeeded: jobs.length - failed, failed };
 }
 
 function registerNotificationMenus() {
@@ -192,6 +315,36 @@ function registerNotificationMenus() {
     if (chat === null) return;
     await GM_setValue(NOTIFY_KEYS.telegramBot, bot.trim());
     await GM_setValue(NOTIFY_KEYS.telegramChat, chat.trim());
+  });
+  GM_registerMenuCommand("配置企业微信通知", async () => {
+    const value = ask("输入企业微信群机器人 Webhook Key 或完整 Webhook URL；留空并确定可关闭该通知：");
+    if (value !== null) await GM_setValue(NOTIFY_KEYS.wecom, value.trim());
+  });
+  GM_registerMenuCommand("配置钉钉通知", async () => {
+    const value = ask("输入钉钉群机器人 Access Token 或完整 Webhook URL；留空并确定可关闭该通知：");
+    if (value !== null) await GM_setValue(NOTIFY_KEYS.dingtalk, value.trim());
+  });
+  GM_registerMenuCommand("配置飞书通知", async () => {
+    const value = ask("输入飞书群机器人 Webhook Key 或完整 Webhook URL；留空并确定可关闭该通知：");
+    if (value !== null) await GM_setValue(NOTIFY_KEYS.feishu, value.trim());
+  });
+  GM_registerMenuCommand("配置 PushMe 通知", async () => {
+    const value = ask("输入 PushMe Key；留空并确定可关闭该通知：");
+    if (value !== null) await GM_setValue(NOTIFY_KEYS.pushme, value.trim());
+  });
+  GM_registerMenuCommand("配置 Bark 通知", async () => {
+    const value = ask("输入 Bark Key 或完整推送 URL；留空并确定可关闭该通知：");
+    if (value !== null) await GM_setValue(NOTIFY_KEYS.bark, value.trim());
+  });
+  GM_registerMenuCommand("测试远程通知", async () => {
+    const result = await sendRemoteNotifications(
+      "GLaDOS 通知测试",
+      "配置成功后，你会在已启用的远程通知渠道收到这条消息。"
+    );
+    const text = result.configured === 0
+      ? "尚未配置远程通知渠道。"
+      : `已发送 ${result.configured} 个渠道：成功 ${result.succeeded} 个，失败 ${result.failed} 个。`;
+    GM_notification({ title: "GLaDOS 通知测试", text, timeout: 10000 });
   });
 }
 
