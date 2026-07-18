@@ -61,6 +61,7 @@ async function testSuccessfulCheckin() {
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
   assert.equal(result.requests[1].url, "https://glados.network/api/user/checkin");
   assert.equal(result.requests[1].anonymous, false);
+  assert.equal(JSON.parse(result.requests[1].data).token, "glados.network");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS · us***r@example.com");
   assert.match(result.notifications[0].text, /^签到成功！\n今日签到获得10积分，共128\.5积分/);
@@ -80,6 +81,7 @@ async function testFallsBackToRocksLogin() {
   assert.equal(result.requests[1].url, "https://glados.rocks/api/user/status");
   assert.equal(result.requests[2].url, "https://glados.rocks/api/user/checkin");
   assert.equal(result.requests[2].headers.Origin, "https://glados.rocks");
+  assert.equal(JSON.parse(result.requests[2].data).token, "glados.rocks");
   assert.equal(result.notifications[0].title, "GLaDOS · ro***s@example.com");
 }
 
@@ -111,6 +113,7 @@ async function testFindsSessionOnAdditionalMainDomains() {
     assert.equal(statusRequest.url, `${origin}/api/user/status`);
     assert.equal(checkinRequest.url, `${origin}/api/user/checkin`);
     assert.equal(checkinRequest.headers.Origin, origin);
+    assert.equal(JSON.parse(checkinRequest.data).token, `glados.${domain}`);
   }
 }
 

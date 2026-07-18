@@ -196,6 +196,7 @@ async function testCronSigninUsesCapturedAdditionalOrigins() {
     assert.equal(result.doneValue.status, "ok", `origin ${origin} should check in`);
     assert.equal(postOptions.url, `${origin}/api/user/checkin`);
     assert.equal(postOptions.headers.Origin, origin);
+    assert.equal(JSON.parse(postOptions.body).token, `glados.${host}`);
     assert.equal(getOptions.url, `${origin}/api/user/status`);
   }
 }
@@ -335,7 +336,7 @@ async function testCronSigninWithAuthorizationOnly() {
   assert.equal(postOptions.url, "https://glados.rocks/api/user/checkin");
   assert.equal(postOptions.headers.Origin, "https://glados.rocks");
   assert.equal(result.doneValue.status, "already_checked");
-  assert.equal(result.doneValue.version, "reliability-20260716");
+  assert.equal(result.doneValue.version, "reliability-20260718-dynamic-token");
 }
 
 async function testCronSignin() {
@@ -377,7 +378,7 @@ async function testCronSignin() {
   assert.match(result.notifications[0].body, /剩余34天/);
   assert.deepEqual(result.doneValue, {
     status: "ok",
-    version: "reliability-20260716",
+    version: "reliability-20260718-dynamic-token",
     checkinMessage: "签到成功！\n今日签到获得10积分，共128积分",
     remainingDays: 34,
   });

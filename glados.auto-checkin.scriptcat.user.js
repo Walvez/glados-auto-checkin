@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.4.0
+// @version      1.4.1
 // @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -542,7 +542,7 @@ async function run() {
       Origin: origin,
       "Content-Type": "application/json;charset=UTF-8",
     },
-    data: JSON.stringify({ token: "glados.cloud" }),
+    data: JSON.stringify({ token: origin.slice("https://".length) }),
   });
 
   const checkin = classifyCheckin(result);

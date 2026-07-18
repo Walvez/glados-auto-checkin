@@ -18,7 +18,7 @@ const core = require("../lib/glados-core");
 
 const {
   GLADOS_ORIGINS,
-  CHECKIN_TOKEN,
+  checkinTokenForOrigin,
   MAX_REQUEST_ATTEMPTS,
   RETRY_DELAY_MS,
   REQUEST_TIMEOUT_MS,
@@ -197,7 +197,7 @@ async function checkinAccount(account, request, origins, logger, secrets) {
 
   const checkinResponse = await request("POST", `${origin}/api/user/checkin`, {
     headers: buildCheckinHeaders(origin, account.cookie, account.authorization),
-    body: JSON.stringify({ token: CHECKIN_TOKEN }),
+    body: JSON.stringify({ token: checkinTokenForOrigin(origin) }),
   });
 
   let classified;

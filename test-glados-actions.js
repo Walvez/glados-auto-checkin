@@ -10,7 +10,7 @@ const checkinCli = require("./cli/checkin");
 
 const {
   GLADOS_ORIGINS,
-  CHECKIN_TOKEN,
+  checkinTokenForOrigin,
   parseAccounts,
   classifyCheckin,
   redactSecrets,
@@ -79,6 +79,13 @@ function testParseAccountsJsonArray() {
   assert.equal(accounts.length, 2);
   assert.equal(accounts[0].cookie, sampleCookie("1"));
   assert.equal(accounts[1].name, "账号2");
+}
+
+function testCheckinTokenMatchesOrigin() {
+  GLADOS_ORIGINS.forEach((origin) => {
+    assert.equal(checkinTokenForOrigin(origin), new URL(origin).hostname);
+  });
+  assert.throws(() => checkinTokenForOrigin("https://evil.example"), /不受支持/);
 }
 
 function testParseAccountsNewline() {
@@ -200,7 +207,10 @@ async function testSuccessfulSingleAccount() {
   assert.equal(outcome.results[0].kind, "success");
   assert.equal(fetchImpl.calls[0].url, `${GLADOS_ORIGINS[0]}/api/user/status`);
   assert.equal(fetchImpl.calls[1].url, `${GLADOS_ORIGINS[0]}/api/user/checkin`);
-  assert.equal(JSON.parse(fetchImpl.calls[1].init.body).token, CHECKIN_TOKEN);
+  assert.equal(
+    JSON.parse(fetchImpl.calls[1].init.body).token,
+    new URL(GLADOS_ORIGINS[0]).hostname
+  );
   assert.equal(fetchImpl.calls[1].init.headers.Origin, GLADOS_ORIGINS[0]);
   assert.doesNotMatch(logger.all(), /sig-ok-value/);
   assert.match(logger.all(), /us\*\*\*r@example\.com|签到成功/);
@@ -242,6 +252,7 @@ async function testDomainFallbackSameOriginCheckin() {
   assert.equal(fetchImpl.calls[2].url, "https://glados.rocks/api/user/status");
   assert.equal(fetchImpl.calls[3].url, "https://glados.rocks/api/user/checkin");
   assert.equal(fetchImpl.calls[3].init.headers.Origin, "https://glados.rocks");
+  assert.equal(JSON.parse(fetchImpl.calls[3].init.body).token, "glados.rocks");
 }
 
 async function testForcedOrigin() {
@@ -417,26 +428,27 @@ function testWorkflowYamlStructure() {
 
 function testPackageScriptsAndVersion() {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
-  assert.equal(pkg.version, "1.4.0");
+  assert.equal(pkg.version, "1.4.1");
   assert.match(pkg.scripts.test, /test-glados-actions/);
   assert.match(pkg.scripts["checkin"], /cli\/checkin\.js/);
 }
 
-function testExistingScriptsUseCloudToken() {
+function testExistingScriptsUseDynamicToken() {
   const surge = fs.readFileSync(path.join(__dirname, "glados.autosign.surge.js"), "utf8");
   const scriptcat = fs.readFileSync(
     path.join(__dirname, "glados.auto-checkin.scriptcat.user.js"),
     "utf8"
   );
-  assert.match(surge, /"token":\s*"glados\.cloud"/);
-  assert.match(scriptcat, /token:\s*"glados\.cloud"/);
-  assert.doesNotMatch(surge, /"token":\s*"glados\.one"/);
-  assert.doesNotMatch(scriptcat, /token:\s*"glados\.one"/);
+  assert.match(surge, /token:\s*origin\.slice\("https:\/\/"\.length\)/);
+  assert.match(scriptcat, /token:\s*origin\.slice\("https:\/\/"\.length\)/);
+  assert.doesNotMatch(surge, /"token":\s*"glados\.(?:one|cloud)"/);
+  assert.doesNotMatch(scriptcat, /token:\s*"glados\.(?:one|cloud)"/);
 }
 
 async function run() {
   const tests = [
     ["parseAccounts JSON array", testParseAccountsJsonArray],
+    ["check-in token matches origin", testCheckinTokenMatchesOrigin],
     ["parseAccounts newline", testParseAccountsNewline],
     ["parseAccounts object array", testParseAccountsObjectArray],
     ["parseAccounts rejects empty", testParseAccountsRejectsEmpty],
@@ -459,7 +471,7 @@ async function run() {
     ["main --help", testMainHelp],
     ["workflow YAML structure", testWorkflowYamlStructure],
     ["package scripts/version", testPackageScriptsAndVersion],
-    ["existing scripts cloud token", testExistingScriptsUseCloudToken],
+    ["existing scripts dynamic token", testExistingScriptsUseDynamicToken],
   ];
 
   let failed = 0;

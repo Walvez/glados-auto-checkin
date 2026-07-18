@@ -12,7 +12,7 @@ Check in automatically every day and receive clear result notifications<br>
 Supports **ScriptCat · Surge · Quantumult X · GitHub Actions** and all 6 GLaDOS main-site domains: `glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.4.1-blue.svg)](package.json)
 [![ScriptCat](https://img.shields.io/badge/ScriptCat-Install-ff6b35)](https://scriptcat.org/en/script-show-page/7014)
 [![Surge](https://img.shields.io/badge/Surge-Module-5b5bd6)](Surge/glados-auto-checkin.sgmodule)
 [![Quantumult X](https://img.shields.io/badge/Quantumult%20X-Snippet-111111)](QuantumultX/glados-auto-checkin.snippet)
@@ -106,7 +106,7 @@ curl -fsSL 'https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/he
 
 ### GitHub Actions
 
-Use this when you do not keep a local browser or proxy running. The workflow runs a Node.js CLI that reuses this repo’s strict response checks, limited retries, and same-origin check-in flow. The check-in API body token is `glados.cloud` (2026 API).
+Use this when you do not keep a local browser or proxy running. The workflow runs a Node.js CLI that reuses this repo’s strict response checks, limited retries, and same-origin check-in flow. The check-in API body token is derived from the active request hostname (for example, `glados.rocks` for requests to `glados.rocks`).
 
 #### 1. Fork or use this repository
 
@@ -230,7 +230,7 @@ Detect session → Request check-in → Validate response → Read points and ex
 
 - ScriptCat probes the 6 main-site domains in order (`glados.network` → `glados.rocks` → `glados.one` → `glados.space` → `glados.cloud` → `glados.vip`) and completes the check-in on the same domain where it finds an active session.
 - Surge and Quantumult X capture credentials and the active origin from any of those main sites via MitM, and always send check-in requests to that same domain. They run at `07:15` and `15:15` by default. A successful morning run records the local daily state, so the afternoon run exits silently.
-- GitHub Actions / CLI use the cookie secret, probe the 6 domains with `glados.cloud` first, and complete check-in on the **same logged-in origin**. The body token is `glados.cloud`.
+- GitHub Actions / CLI use the cookie secret, probe the 6 domains with `glados.cloud` first, and complete check-in on the **same logged-in origin**. The body token always matches the actual request hostname.
 - Unknown responses, HTML error pages, 401/403, 429, and 5xx responses are handled separately. Success is reported only when the script recognizes a check-in record or an explicit success state.
 
 ## Custom Schedule
@@ -310,9 +310,9 @@ The cookie may have expired (often after several weeks) or been copied incomplet
 </details>
 
 <details>
-<summary><strong>I see “please checkin via https://glados.cloud”</strong></summary>
+<summary><strong>I see “please checkin via ...”</strong></summary>
 
-That is the typical 2026 API change: the check-in body token must be `glados.cloud`. This repo’s CLI and scripts already use that token. Older scripts that still send `glados.one` need updating.
+This usually means the check-in body token does not match the current request hostname. The official GLaDOS client sends a domain-specific token—for example, `glados.network` on `glados.network` and `glados.rocks` on `glados.rocks`. Every script in this repository now derives the token from the actual origin.
 
 </details>
 
