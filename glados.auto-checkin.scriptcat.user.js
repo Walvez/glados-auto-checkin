@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.2
+// @version      1.5.3
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -410,6 +410,17 @@ function maskEmail(email) {
   return `${maskedName}@${domain}`;
 }
 
+function maskEmailCompact(email) {
+  const text = String(email || "");
+  const separator = text.lastIndexOf("@");
+  if (separator <= 0) return text || "未知账户";
+
+  const name = text.slice(0, separator);
+  const domain = text.slice(separator + 1);
+  const maskedName = name.length <= 2 ? "**" : `${name.slice(0, 2)}**${name.slice(-1)}`;
+  return `${maskedName}@${domain}`;
+}
+
 async function notifyCurrentAccounts() {
   const accounts = [];
   const failures = [];
@@ -522,6 +533,8 @@ function classifyCheckin(result) {
     return {
       kind: "already_checked",
       message: `今日已签到。${pointsText ? `\n${pointsText}` : ""}`,
+      earnedPoints: record && record.change !== undefined ? formatPoints(record.change) : undefined,
+      totalPoints: record && record.balance !== undefined ? formatPoints(record.balance) : undefined,
     };
   }
 
@@ -530,6 +543,8 @@ function classifyCheckin(result) {
     return {
       kind: "success",
       message: `签到成功！\n今日签到获得${formatPoints(record.change)}积分${total}`,
+      earnedPoints: formatPoints(record.change),
+      totalPoints: record.balance !== undefined ? formatPoints(record.balance) : undefined,
     };
   }
 
@@ -606,6 +621,7 @@ async function findLoggedInSessions() {
 
 async function checkinSession({ origin, status }) {
   const account = maskEmail(status.data.email);
+  const compactAccount = maskEmailCompact(status.data.email);
   log(`${account} 使用已登录域名：${origin}`);
   const result = await requestWithRetry({
     method: "POST",
@@ -631,16 +647,24 @@ async function checkinSession({ origin, status }) {
   log(`${account}：${message}${remainingText.replace("\n", "，")}`);
   return {
     account,
+    compactAccount,
     kind: checkin.kind,
     message,
+    earnedPoints: checkin.earnedPoints,
+    totalPoints: checkin.totalPoints,
+    remainingDays: Number.isFinite(remaining) ? remaining : undefined,
     remainingText,
     origin,
   };
 }
 
 function resultLine(result) {
-  const domain = new URL(result.origin).hostname;
-  return `${result.account}：${result.message.replace(/\n/g, "，")}${result.remainingText.replace("\n", "，")}，签到域名：${domain}`;
+  const domain = new URL(result.origin).hostname.replace(/^glados/, "");
+  const status = result.kind === "success" ? "✅" : "已签";
+  const earned = result.earnedPoints === undefined ? "+?" : `+${result.earnedPoints}`;
+  const total = result.totalPoints === undefined ? "?积分" : `${result.totalPoints}积分`;
+  const days = result.remainingDays === undefined ? "?天" : `${result.remainingDays}天`;
+  return `${domain}: ${result.compactAccount}, ${status}, ${earned}; ${total}, ${days}.`;
 }
 
 async function run() {
@@ -662,9 +686,9 @@ async function run() {
 
   if (sessions.length === 1 && failures.length === 0 && probeErrors.length === 0) {
     const [result] = results;
-    const text = `${result.message}${result.remainingText}\n签到域名：${new URL(result.origin).hostname}`;
+    const text = resultLine(result);
     GM_notification({
-      title: `GLaDOS · ${result.account}`,
+      title: "GLaDOS 签到结果",
       text,
       timeout: 10000,
     });
@@ -685,7 +709,6 @@ async function run() {
       ? "GLaDOS 多账号签到未全部完成"
       : "GLaDOS 多账号签到完成";
   const summary = [
-    `成功/已签到 ${results.length}/${sessions.length} 个已发现账号`,
     ...lines,
   ].join("\n");
 

@@ -78,10 +78,8 @@ async function testSuccessfulCheckin() {
   assert.equal(result.requests[6].anonymous, false);
   assert.equal(JSON.parse(result.requests[6].data).token, "glados.network");
   assert.equal(result.notifications.length, 1);
-  assert.equal(result.notifications[0].title, "GLaDOS · us***r@example.com");
-  assert.match(result.notifications[0].text, /^签到成功！\n今日签到获得10积分，共128\.5积分/);
-  assert.match(result.notifications[0].text, /剩余441天/);
-  assert.match(result.notifications[0].text, /签到域名：glados\.network/);
+  assert.equal(result.notifications[0].title, "GLaDOS 签到结果");
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, ✅, +10; 128.5积分, 441天.");
 }
 
 async function testManualCheckinMenuRunsAgainAndNotifies() {
@@ -104,7 +102,7 @@ async function testManualCheckinMenuRunsAgainAndNotifies() {
   assert.equal(result.requests.length, 14);
   assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 2);
   assert.equal(result.notifications.length, 2);
-  assert.match(result.notifications[1].text, /今日已签到/);
+  assert.equal(result.notifications[1].text, ".network: ma**l@example.com, 已签, +?; ?积分, 60天.");
 }
 
 async function testCurrentAccountMenuShowsEachDomainWithMaskedEmail() {
@@ -146,8 +144,8 @@ async function testFallsBackToRocksLogin() {
   assert.equal(result.requests[1].headers.Referer, "https://glados.rocks/console");
   assert.equal(result.requests[6].headers.Referer, "https://glados.rocks/console/checkin");
   assert.equal(JSON.parse(result.requests[6].data).token, "glados.rocks");
-  assert.equal(result.notifications[0].title, "GLaDOS · ro***s@example.com");
-  assert.match(result.notifications[0].text, /签到域名：glados\.rocks/);
+  assert.equal(result.notifications[0].title, "GLaDOS 签到结果");
+  assert.equal(result.notifications[0].text, ".rocks: ro**s@example.com, ✅, +9; 99积分, 88天.");
 }
 
 async function testFindsSessionOnAdditionalMainDomains() {
@@ -192,11 +190,11 @@ async function testChecksInDifferentAccountsAcrossDomains() {
   assert.equal(JSON.parse(result.requests[7].data).token, "glados.rocks");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 多账号签到完成");
-  assert.match(result.notifications[0].text, /成功\/已签到 2\/2 个已发现账号/);
-  assert.match(result.notifications[0].text, /fi\*\*\*t@example\.com/);
-  assert.match(result.notifications[0].text, /se\*\*\*d@example\.com/);
-  assert.match(result.notifications[0].text, /fi\*\*\*t@example\.com.*签到域名：glados\.network/);
-  assert.match(result.notifications[0].text, /se\*\*\*d@example\.com.*签到域名：glados\.rocks/);
+  assert.equal(
+    result.notifications[0].text,
+    ".network: fi**t@example.com, ✅, +5; 50积分, 100天.\n" +
+      ".rocks: se**d@example.com, 已签, +?; ?积分, 200天."
+  );
 }
 
 async function testDeduplicatesSameAccountAcrossDomains() {
@@ -229,7 +227,8 @@ async function testMultiAccountPartialFailureContinuesAndSummarizes() {
   assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 2);
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 多账号签到未全部完成");
-  assert.match(result.notifications[0].text, /成功\/已签到 1\/2 个已发现账号/);
+  assert.doesNotMatch(result.notifications[0].text, /成功\/已签到/);
+  assert.match(result.notifications[0].text, /\.network: go\*\*d@example\.com, ✅, \+3; 30积分, 10天\./);
   assert.match(result.notifications[0].text, /失败：签到接口返回异常/);
 }
 
@@ -246,10 +245,7 @@ async function testAlreadyCheckedIn() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.match(
-    result.notifications[0].text,
-    /^今日已签到。\n今日签到获得11积分，当前共271积分\n剩余30天\n签到域名：glados\.network$/,
-  );
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +11; 271积分, 30天.");
 }
 
 async function testAlreadyCheckedInChineseMessage() {
@@ -261,7 +257,7 @@ async function testAlreadyCheckedInChineseMessage() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.match(result.notifications[0].text, /^今日已签到。/);
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; ?积分, 30天.");
 }
 
 async function testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn() {
@@ -273,8 +269,7 @@ async function testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.match(result.notifications[0].text, /^今日已签到。/);
-  assert.match(result.notifications[0].text, /签到域名：glados\.network/);
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; ?积分, 30天.");
 }
 
 async function testCurrentAlreadyCheckedInResponse() {
@@ -297,10 +292,7 @@ async function testCurrentAlreadyCheckedInResponse() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(
-    result.notifications[0].text,
-    "今日已签到。\n今日签到获得11积分，当前共271积分\n剩余426天\n签到域名：glados.network",
-  );
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +11; 271积分, 426天.");
   assert.doesNotMatch(result.notifications[0].text, /签到成功/);
 }
 
@@ -384,7 +376,7 @@ async function testRetriesHttp429() {
 
   assert.equal(result.error, undefined);
   assert.equal(result.requests.length, 8);
-  assert.match(result.notifications[0].text, /签到成功/);
+  assert.match(result.notifications[0].text, /✅/);
 }
 
 async function testHttp403PromptsLoginWithoutRetry() {
@@ -413,8 +405,7 @@ async function testExplicitSuccessWithoutPointRecord() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.match(result.notifications[0].text, /^签到成功！/);
-  assert.doesNotMatch(result.notifications[0].text, /剩余NaN天/);
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, ✅, +?; ?积分, ?天.");
 }
 
 async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
@@ -438,7 +429,7 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
   assert.equal(result.requests[7].anonymous, true);
   assert.equal(result.requests[7].headers.Cookie, undefined);
   assert.doesNotMatch(result.requests[7].data, /user@example\.com/);
-  assert.match(result.requests[7].data, /us\*\*\*r@example\.com/);
+  assert.match(result.requests[7].data, /us\*\*r@example\.com/);
 }
 
 async function testAdditionalRemoteNotificationChannels() {
@@ -483,7 +474,7 @@ async function testAdditionalRemoteNotificationChannels() {
     assert.equal(item.anonymous, true);
     assert.equal(item.headers.Cookie, undefined);
     assert.doesNotMatch(item.data, /user@example\.com/);
-    assert.match(item.data, /us\*\*\*r@example\.com/);
+    assert.match(item.data, /us\*\*r@example\.com/);
   });
   assert.match(remote[0].data, /"msgtype":"text"/);
   assert.match(remote[1].data, /"msgtype":"markdown"/);
