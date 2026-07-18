@@ -339,6 +339,30 @@ async function testCronSigninWithAuthorizationOnly() {
   assert.equal(result.doneValue.version, "reliability-20260718-dynamic-token");
 }
 
+async function testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn() {
+  const result = await runScript({
+    store: {
+      evil_gladoscookie: "session=test",
+      evil_gladosorigin: "https://glados.rocks",
+    },
+    $httpClient: {
+      post: (_options, callback) => {
+        callback(null, { status: 200 }, JSON.stringify({ code: 1 }));
+      },
+      get: (_options, callback) => {
+        callback(
+          null,
+          { status: 200 },
+          JSON.stringify({ code: 0, data: { email: "user@example.com", leftDays: 30 } })
+        );
+      },
+    },
+  });
+
+  assert.equal(result.doneValue.status, "already_checked");
+  assert.match(result.notifications[0].body, /今日已签到/);
+}
+
 async function testCronSignin() {
   let postOptions;
   let getOptions;
@@ -619,6 +643,7 @@ const resultNotifications = [];
   await testCronSigninUsesCapturedAdditionalOrigins();
   await testCronSigninFormatsDecimalPoints();
   await testCronSigninWithAuthorizationOnly();
+  await testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn();
   await testIgnoresUnsupportedOrigins();
   await testMissingCredentialsMentionsAllMainDomains();
   await testQuantumultXRuntime();

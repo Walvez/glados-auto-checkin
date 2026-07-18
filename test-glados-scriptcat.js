@@ -69,13 +69,16 @@ async function testSuccessfulCheckin() {
   assert.equal(result.error, undefined);
   assert.equal(result.requests.length, 7);
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
+  assert.equal(result.requests[0].headers.Referer, "https://glados.network/console");
   assert.equal(result.requests[6].url, "https://glados.network/api/user/checkin");
+  assert.equal(result.requests[6].headers.Referer, "https://glados.network/console/checkin");
   assert.equal(result.requests[6].anonymous, false);
   assert.equal(JSON.parse(result.requests[6].data).token, "glados.network");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS · us***r@example.com");
   assert.match(result.notifications[0].text, /^签到成功！\n今日签到获得10积分，共128\.5积分/);
   assert.match(result.notifications[0].text, /剩余441天/);
+  assert.match(result.notifications[0].text, /签到域名：glados\.network/);
 }
 
 async function testFallsBackToRocksLogin() {
@@ -92,8 +95,11 @@ async function testFallsBackToRocksLogin() {
   assert.equal(result.requests[1].url, "https://glados.rocks/api/user/status");
   assert.equal(result.requests[6].url, "https://glados.rocks/api/user/checkin");
   assert.equal(result.requests[6].headers.Origin, "https://glados.rocks");
+  assert.equal(result.requests[1].headers.Referer, "https://glados.rocks/console");
+  assert.equal(result.requests[6].headers.Referer, "https://glados.rocks/console/checkin");
   assert.equal(JSON.parse(result.requests[6].data).token, "glados.rocks");
   assert.equal(result.notifications[0].title, "GLaDOS · ro***s@example.com");
+  assert.match(result.notifications[0].text, /签到域名：glados\.rocks/);
 }
 
 async function testFindsSessionOnAdditionalMainDomains() {
@@ -112,8 +118,10 @@ async function testFindsSessionOnAdditionalMainDomains() {
     const statusRequest = result.requests.find((item) => item.url === `${origin}/api/user/status`);
     const checkinRequest = result.requests[6];
     assert.equal(statusRequest.url, `${origin}/api/user/status`);
+    assert.equal(statusRequest.headers.Referer, `${origin}/console`);
     assert.equal(checkinRequest.url, `${origin}/api/user/checkin`);
     assert.equal(checkinRequest.headers.Origin, origin);
+    assert.equal(checkinRequest.headers.Referer, `${origin}/console/checkin`);
     assert.equal(JSON.parse(checkinRequest.data).token, `glados.${domain}`);
   }
 }
@@ -139,6 +147,8 @@ async function testChecksInDifferentAccountsAcrossDomains() {
   assert.match(result.notifications[0].text, /成功\/已签到 2\/2 个已发现账号/);
   assert.match(result.notifications[0].text, /fi\*\*\*t@example\.com/);
   assert.match(result.notifications[0].text, /se\*\*\*d@example\.com/);
+  assert.match(result.notifications[0].text, /fi\*\*\*t@example\.com.*签到域名：glados\.network/);
+  assert.match(result.notifications[0].text, /se\*\*\*d@example\.com.*签到域名：glados\.rocks/);
 }
 
 async function testDeduplicatesSameAccountAcrossDomains() {
@@ -190,7 +200,7 @@ async function testAlreadyCheckedIn() {
   assert.equal(result.error, undefined);
   assert.match(
     result.notifications[0].text,
-    /^今日已签到。\n今日签到获得11积分，当前共271积分\n剩余30天$/,
+    /^今日已签到。\n今日签到获得11积分，当前共271积分\n剩余30天\n签到域名：glados\.network$/,
   );
 }
 
@@ -204,6 +214,19 @@ async function testAlreadyCheckedInChineseMessage() {
 
   assert.equal(result.error, undefined);
   assert.match(result.notifications[0].text, /^今日已签到。/);
+}
+
+async function testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn() {
+  const result = await runScript([
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    }),
+    response({ code: 1 }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.match(result.notifications[0].text, /^今日已签到。/);
+  assert.match(result.notifications[0].text, /签到域名：glados\.network/);
 }
 
 async function testCurrentAlreadyCheckedInResponse() {
@@ -228,7 +251,7 @@ async function testCurrentAlreadyCheckedInResponse() {
   assert.equal(result.error, undefined);
   assert.equal(
     result.notifications[0].text,
-    "今日已签到。\n今日签到获得11积分，当前共271积分\n剩余426天",
+    "今日已签到。\n今日签到获得11积分，当前共271积分\n剩余426天\n签到域名：glados.network",
   );
   assert.doesNotMatch(result.notifications[0].text, /签到成功/);
 }
@@ -450,6 +473,7 @@ async function testAdditionalRemoteNotificationChannels() {
   await testMultiAccountPartialFailureContinuesAndSummarizes();
   await testAlreadyCheckedIn();
   await testAlreadyCheckedInChineseMessage();
+  await testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn();
   await testCurrentAlreadyCheckedInResponse();
   await testNeedsLogin();
   await testNetworkFailureNotifies();

@@ -213,7 +213,7 @@ async function checkinAccount(account, request, origins, logger, secrets) {
   }
 
   const remainingText = remainingDays != null ? `\n剩余${remainingDays}天` : "";
-  const summary = `${classified.message}${remainingText}`;
+  const summary = `${classified.message}${remainingText}\n签到域名：${new URL(origin).hostname}`;
 
   account._done = {
     kind: classified.kind,

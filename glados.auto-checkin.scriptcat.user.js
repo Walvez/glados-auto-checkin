@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.0
+// @version      1.5.1
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -428,10 +428,9 @@ function isAlreadyCheckedIn(result) {
     .toLowerCase()
     .replace(/\s+/g, " ");
   const code = Number(result && result.code);
-  const points = Number(result && result.points);
 
   return (
-    (code === 1 && Number.isFinite(points) && points === 0) ||
+    code === 1 ||
     message.includes("please try tomorrow") ||
     message.includes("today's observation logged") ||
     message.includes("return tomorrow") ||
@@ -499,6 +498,7 @@ async function findLoggedInSessions() {
         url: `${origin}/api/user/status`,
         headers: {
           Accept: "application/json, text/plain, */*",
+          Referer: `${origin}/console`,
         },
       });
 
@@ -554,6 +554,7 @@ async function checkinSession({ origin, status }) {
     headers: {
       Accept: "application/json, text/plain, */*",
       Origin: origin,
+      Referer: `${origin}/console/checkin`,
       "Content-Type": "application/json;charset=UTF-8",
     },
     data: JSON.stringify({ token: origin.slice("https://".length) }),
@@ -579,7 +580,8 @@ async function checkinSession({ origin, status }) {
 }
 
 function resultLine(result) {
-  return `${result.account}：${result.message.replace(/\n/g, "，")}${result.remainingText.replace("\n", "，")}`;
+  const domain = new URL(result.origin).hostname;
+  return `${result.account}：${result.message.replace(/\n/g, "，")}${result.remainingText.replace("\n", "，")}，签到域名：${domain}`;
 }
 
 async function run() {
@@ -601,7 +603,7 @@ async function run() {
 
   if (sessions.length === 1 && failures.length === 0 && probeErrors.length === 0) {
     const [result] = results;
-    const text = `${result.message}${result.remainingText}`;
+    const text = `${result.message}${result.remainingText}\n签到域名：${new URL(result.origin).hostname}`;
     GM_notification({
       title: `GLaDOS · ${result.account}`,
       text,
