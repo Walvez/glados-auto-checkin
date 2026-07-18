@@ -23,6 +23,7 @@ async function runScript(responses, extraContext = {}) {
   const logs = [];
   const openedTabs = [];
   const requests = [];
+  const menuCommands = [];
 
   const context = {
     URL,
@@ -34,6 +35,8 @@ async function runScript(responses, extraContext = {}) {
     GM_log: (message, level) => logs.push({ message, level }),
     GM_notification: (options) => notifications.push(options),
     GM_openInTab: (...args) => openedTabs.push(args),
+    GM_setValue: async () => {},
+    GM_registerMenuCommand: (name, callback) => menuCommands.push({ name, callback }),
     GM_xmlhttpRequest: (options) => {
       requests.push(options);
       const next = responses.shift();
@@ -55,7 +58,7 @@ async function runScript(responses, extraContext = {}) {
     error = caught;
   }
 
-  return { error, logs, notifications, openedTabs, requests, value };
+  return { error, logs, menuCommands, notifications, openedTabs, requests, value };
 }
 
 async function testSuccessfulCheckin() {
@@ -79,6 +82,51 @@ async function testSuccessfulCheckin() {
   assert.match(result.notifications[0].text, /^签到成功！\n今日签到获得10积分，共128\.5积分/);
   assert.match(result.notifications[0].text, /剩余441天/);
   assert.match(result.notifications[0].text, /签到域名：glados\.network/);
+}
+
+async function testManualCheckinMenuRunsAgainAndNotifies() {
+  const loggedIn = statusScan({
+    network: response({ code: 0, data: { email: "manual@example.com", leftDays: 60 } }),
+  });
+  const result = await runScript([
+    ...loggedIn,
+    response({ list: [{ change: 8, balance: 88 }] }),
+    ...loggedIn,
+    response({ code: 1, message: "Please Try Tomorrow" }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.menuCommands.slice(0, 2).map((item) => item.name), [
+    "立即手动签到",
+    "查看当前登录账号",
+  ]);
+  await result.menuCommands[0].callback();
+  assert.equal(result.requests.length, 14);
+  assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 2);
+  assert.equal(result.notifications.length, 2);
+  assert.match(result.notifications[1].text, /今日已签到/);
+}
+
+async function testCurrentAccountMenuShowsEachDomainWithMaskedEmail() {
+  const result = await runScript([
+    ...statusScan({
+      network: response({ code: 0, data: { email: "initial@example.com", leftDays: 60 } }),
+    }),
+    response({ list: [{ change: 8, balance: 88 }] }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "first@example.com", leftDays: 60 } }),
+      rocks: response({ code: 0, data: { email: "second@example.com", leftDays: 60 } }),
+    }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  await result.menuCommands[1].callback();
+  assert.equal(result.requests.length, 13);
+  assert.equal(result.notifications.length, 2);
+  assert.equal(result.notifications[1].title, "GLaDOS 当前登录账号");
+  assert.match(result.notifications[1].text, /glados\.network：fi\*\*\*t@example\.com/);
+  assert.match(result.notifications[1].text, /glados\.rocks：se\*\*\*d@example\.com/);
+  assert.doesNotMatch(result.notifications[1].text, /first@example\.com|second@example\.com/);
 }
 
 async function testFallsBackToRocksLogin() {
@@ -466,6 +514,8 @@ async function testAdditionalRemoteNotificationChannels() {
   assert.match(script, /@connect\s+push\.i-i\.me/);
   assert.match(script, /@connect\s+api\.day\.app/);
   await testSuccessfulCheckin();
+  await testManualCheckinMenuRunsAgainAndNotifies();
+  await testCurrentAccountMenuShowsEachDomainWithMaskedEmail();
   await testFallsBackToRocksLogin();
   await testFindsSessionOnAdditionalMainDomains();
   await testChecksInDifferentAccountsAcrossDomains();
