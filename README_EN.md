@@ -42,16 +42,16 @@ Choose one method for your environment. You do not need every option.
 
 | Method | Account support | Key difference | Recommended use | MitM | Manual cookie | Install |
 | :--- | :--- | :--- | :--- | :---: | :---: | :--- |
-| **This ScriptCat script** | Multiple accounts on different main-site domains | Reuses browser sessions without copying cookies | Multiple accounts; regular Chrome / Edge use | No | No | [View setup](#chrome--edge) |
+| **Browser (ScriptCat)** | Multiple accounts on different main-site domains | Reuses browser sessions without copying cookies | Multiple accounts; regular Chrome / Edge / Firefox use | No | No | [View setup](#chrome--edge--firefox) |
 | **Surge module** | One account; the latest captured account replaces the previous one | Runs locally without a background browser | Regular Surge use with one account | Yes | No | [View setup](#surge) |
 | **Quantumult X config** | One account; the latest captured account replaces the previous one | Fits an existing Rewrite and scheduled-task setup | Regular Quantumult X use with one account | Yes | No | [View setup](#quantumult-x) |
 | **GitHub Actions** | Multiple accounts with an optional domain per account | Runs in the cloud without a browser or proxy app | Multiple accounts; no always-on local device | No | Yes (Secret) | [View setup](#github-actions) |
 
-### Chrome / Edge
+### Chrome / Edge / Firefox
 
 The browser version is a background scheduled script for [ScriptCat](https://docs.scriptcat.org/). It does not require packet capture, manual cookie entry, or an open GLaDOS tab.
 
-1. Install ScriptCat from the [Chrome Web Store](https://chromewebstore.google.com/detail/scriptcat/ndcooeababalnlpkfedmmbbbgkljhpjf) or [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/scriptcat/liilgpjgabokdklappibcjfablkpcekh).
+1. Install ScriptCat from the [Chrome Web Store](https://chromewebstore.google.com/detail/scriptcat/ndcooeababalnlpkfedmmbbbgkljhpjf), [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/scriptcat/liilgpjgabokdklappibcjfablkpcekh), or [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/scriptcat/).
 2. Open the [GLaDOS Auto Check-in script page](https://scriptcat.org/en/script-show-page/7014) and select Install.
 3. Sign in to any GLaDOS main site in the same browser, for example [glados.network](https://glados.network/). Also supported: `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, and `glados.vip` (not the defunct `glados.live` or the promo redirect `glados.top`).
 4. For multiple accounts, sign in to a different account on each main-site domain—for example, account A on `glados.network` and account B on `glados.rocks`.
@@ -116,41 +116,40 @@ curl -fsSL 'https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/he
 
 ### GitHub Actions
 
-Use this when you do not keep a local browser or proxy running. The workflow natively supports multiple accounts: each entry can pin its own login domain or omit it for automatic probing. The check-in API body token is derived from the active request hostname (for example, `glados.rocks` for requests to `glados.rocks`).
+Use this when you do not want a browser, Surge, or Quantumult X running locally. After setup, GitHub performs the scheduled check-in in the cloud. Whether you have one account or several, you create only one Repository Secret named `GLADOS_COOKIE`.
 
-#### 1. Fork or use this repository
+> [!NOTE]
+> A fork does not inherit Secrets from its parent repository. Configure the cookie only in **your own fork**—never put it in source code, an issue, or a public log.
 
-1. [Fork](https://github.com/Walvez/glados-auto-checkin/fork) the repo, or configure Secrets on a repo you control.
-2. Open **Settings → Secrets and variables → Actions**.
-3. Create a Repository Secret:
+#### 1. Fork and enable the workflow
 
-| Secret name | Required | Description |
-| :--- | :---: | :--- |
-| `GLADOS_COOKIE` | Yes | One or more account cookies (formats below) |
+1. [Fork this repository](https://github.com/Walvez/glados-auto-checkin/fork) into your GitHub account.
+2. Open the fork and verify the repository owner shown at the top is your username.
+3. Open the **Actions** tab. Scheduled workflows may be disabled on a new public fork; enable workflows if GitHub shows that prompt.
 
-#### 2. Obtain the cookie
+#### 2. Copy the cookie for each account
 
-1. Sign in to GLaDOS in a browser (preferred site today: [glados.cloud](https://glados.cloud); the other five main domains also work).
-2. Open DevTools → Application / Storage → Cookies, or a cookie editor extension.
-3. Copy the session cookie string, typically:
+Repeat these steps for every account:
+
+1. Sign in on the main-site domain you plan to use, such as [glados.cloud](https://glados.cloud) or [glados.rocks](https://glados.rocks).
+2. Press `F12`, open **Network**, and refresh the GLaDOS page.
+3. Select a request such as `/api/user/status` or `/console` that was sent to the current GLaDOS domain.
+4. Under **Request Headers**, find `Cookie` and copy its **value only**, without the `Cookie:` prefix. It normally resembles:
 
    ```text
    koa:sess=...; koa:sess.sig=...
    ```
 
-4. Paste it into Secret `GLADOS_COOKIE`. **Do not** commit it to git or post it in issues.
+5. Record the current domain as well. For multiple accounts, copy each cookie from the domain where that account is signed in.
 
-#### 3. Multi-account formats (robust)
+A cookie is a login credential and may expire after several weeks. Never publish it or send it to another person.
 
-**Do not use `&` as an account separator** (cookie values may contain `&`). Prefer one of:
+#### 3. Create the `GLADOS_COOKIE` Secret
 
-**JSON array (recommended)**
-
-```json
-["koa:sess=account1...; koa:sess.sig=...", "koa:sess=account2...; koa:sess.sig=..."]
-```
-
-Or with labels and the domain used by each account (recommended when different domains hold different accounts):
+1. In **your fork**, open **Settings → Secrets and variables → Actions**.
+2. Under **Repository secrets**, click **New repository secret**.
+3. Enter the case-sensitive name `GLADOS_COOKIE`.
+4. Paste this JSON into **Secret**. This format is recommended even for one account:
 
 ```json
 [
@@ -159,23 +158,47 @@ Or with labels and the domain used by each account (recommended when different d
 ]
 ```
 
-`origin` is optional. When present, that account's credentials are sent only to the selected supported GLaDOS domain. Without it, the CLI probes all six supported domains in its normal order.
+5. Click **Add secret**. Multiple accounts still use this one Secret; do not create `GLADOS_COOKIE_1` or `GLADOS_COOKIE_2`.
 
-**One full cookie per line**
+| Field | Required | Purpose |
+| :--- | :---: | :--- |
+| `name` | No | A label used only in redacted logs |
+| `origin` | Recommended | The domain that issued this cookie; credentials are sent only to that supported official domain |
+| `cookie` | Yes | The complete Cookie value copied from Request Headers |
+
+`origin` accepts only the six supported HTTPS main sites. If omitted, the CLI probes all six, but an explicit origin is recommended when different domains hold different accounts.
+
+<details>
+<summary><strong>Other compatible Secret formats</strong></summary>
+
+A single raw cookie, a JSON array of cookie strings, and one full cookie per line are also supported:
+
+```json
+["koa:sess=account1...; koa:sess.sig=...", "koa:sess=account2...; koa:sess.sig=..."]
+```
 
 ```text
 koa:sess=account1...; koa:sess.sig=...
 koa:sess=account2...; koa:sess.sig=...
 ```
 
-Empty secrets, comment-only input, and invalid JSON fail fast with exit code `1`. Logs redact cookie material.
+Do not use `&` as an account separator because cookie values may contain it. Empty or invalid input fails fast, and logs never print complete cookies.
 
-#### 4. Enable and verify
+</details>
 
-1. Open **Actions** → **GLaDOS Check-in**.
-2. Enable workflows if GitHub prompts you.
-3. Click **Run workflow** once and confirm a green success.
-4. Default schedule (GitHub `schedule` is **UTC**):
+#### 4. Run once and verify
+
+1. Open **Actions** and select **GLaDOS Check-in** on the left.
+2. Click **Enable workflow** first if it appears.
+3. Click **Run workflow**, keep the branch set to `main`, then click the green **Run workflow** button.
+4. Open the new run and wait for `Run GLaDOS check-in` to finish.
+5. A green check means every account succeeded or was already checked in. The log reports the account count while redacting credentials.
+
+If one account fails, the script still processes the rest, but the overall job is red so the expired credential is visible.
+
+#### 5. Automatic schedule
+
+The workflow runs twice per day. GitHub `schedule` uses **UTC**:
 
 | Cron (UTC) | Beijing time (UTC+8) | Role |
 | :--- | :--- | :--- |
@@ -185,9 +208,13 @@ Empty secrets, comment-only input, and invalid JSON fail fast with exit code `1`
 Within **one run**, an account that already succeeded or was already checked in is not checked in again. Across the two daily schedules, a second run that receives “already checked in” still exits `0`.
 
 > [!WARNING]
-> GitHub may delay or skip `schedule` on new or inactive forks. `workflow_dispatch` always works. For more reliable timing, an external cron can call the [workflow_dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event).
+> GitHub documents that scheduled workflows are disabled by default on public forks and may also be disabled after 60 days without repository activity. Re-enable the workflow and run it manually if the schedule stops. Scheduled jobs may also be queued and are not guaranteed to start at the exact minute. See [GitHub's workflow documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows).
 
-#### 5. Local / CLI (optional)
+#### 6. Update an expired cookie
+
+Sign in again on the corresponding domain, copy the new cookie, then edit the existing `GLADOS_COOKIE` under **Settings → Secrets and variables → Actions**. Replace that account's `cookie` value and save. No workflow-file change or additional Secret is needed.
+
+#### 7. Local / CLI (optional)
 
 Requires Node.js 18+ (Actions pins current LTS major **24**):
 
@@ -199,7 +226,7 @@ npm run checkin
 
 Optional: `GLADOS_ORIGIN=https://glados.cloud` supplies a default domain for entries without `origin`; a per-account `origin` takes priority.
 
-#### 6. Notifications
+#### 8. Notifications
 
 Actions **does not** embed third-party push services (no extra secrets or data egress). Rely on:
 

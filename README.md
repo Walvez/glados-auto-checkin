@@ -42,16 +42,16 @@
 
 | 使用方式 | 账号能力 | 优势或不同点 | 建议使用场景 | MitM | 手填 Cookie | 安装入口 |
 | :--- | :--- | :--- | :--- | :---: | :---: | :--- |
-| **本脚本（ScriptCat）** | 多账号；每个账号登录不同主站域名 | 无需复制 Cookie，自动使用浏览器中各域名的独立登录状态 | 有多账号需求、日常使用 Chrome / Edge | 不需要 | 不需要 | [查看安装步骤](#chrome--edge) |
+| **浏览器（ScriptCat）** | 多账号；每个账号登录不同主站域名 | 无需复制 Cookie，自动使用浏览器中各域名的独立登录状态 | 有多账号需求、日常使用 Chrome / Edge / Firefox | 不需要 | 不需要 | [查看安装步骤](#chrome--edge--firefox) |
 | **Surge 模块** | 单账号；后捕获的账号会覆盖前一个 | 代理工具本机定时，不依赖浏览器后台运行 | 日常使用 Surge、只有一个账号 | 需要 | 不需要 | [查看安装步骤](#surge) |
 | **Quantumult X 配置** | 单账号；后捕获的账号会覆盖前一个 | 适合已有 Quantumult X 重写与定时任务环境 | 日常使用 Quantumult X、只有一个账号 | 需要 | 不需要 | [查看安装步骤](#quantumult-x) |
 | **GitHub Actions** | 多账号；可为每个账号指定域名 | 云端运行，不依赖浏览器、Surge 或 Quantumult X 常驻 | 多账号需求、希望完全脱离本机运行 | 不需要 | 需要（Secret） | [查看安装步骤](#github-actions) |
 
-### Chrome / Edge
+### Chrome / Edge / Firefox
 
 浏览器方案使用 [ScriptCat（脚本猫）](https://docs.scriptcat.org/docs/use/use/)后台定时脚本，不需要抓包、复制 Cookie 或保持 GLaDOS 网页打开。
 
-1. 安装 ScriptCat：[Chrome 应用商店](https://chromewebstore.google.com/detail/scriptcat/ndcooeababalnlpkfedmmbbbgkljhpjf) / [Edge 加载项](https://microsoftedge.microsoft.com/addons/detail/scriptcat/liilgpjgabokdklappibcjfablkpcekh)。
+1. 安装 ScriptCat：[Chrome 应用商店](https://chromewebstore.google.com/detail/scriptcat/ndcooeababalnlpkfedmmbbbgkljhpjf) / [Edge 加载项](https://microsoftedge.microsoft.com/addons/detail/scriptcat/liilgpjgabokdklappibcjfablkpcekh) / [Firefox 附加组件](https://addons.mozilla.org/zh-CN/firefox/addon/scriptcat/)。
 2. 打开 [GLaDOS 自动签到脚本发布页](https://scriptcat.org/zh-CN/script-show-page/7014)，点击“安装脚本”。
 3. 在同一个浏览器中登录任一 GLaDOS 主站，例如 [glados.network](https://glados.network/)。另支持 `glados.rocks`、`glados.one`、`glados.space`、`glados.cloud`、`glados.vip`（不含已失效的 `glados.live` 与推广入口 `glados.top`）。
 4. 如需多账号，在不同主站域名中分别登录不同账号。例如账号 A 登录 `glados.network`，账号 B 登录 `glados.rocks`；脚本会扫描全部主站并逐个签到。
@@ -116,41 +116,40 @@ curl -fsSL 'https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/he
 
 ### GitHub Actions
 
-适合没有常开电脑/手机代理的场景。工作流原生支持多账号；每个账号都可以绑定自己的登录域名，也可以省略域名让 CLI 自动探测。签到 API 的 body token 会自动使用当前请求域名（例如请求 `glados.rocks` 时使用 `glados.rocks`）。
+适合不想依赖浏览器、Surge 或 Quantumult X 常驻的用户。配置完成后，GitHub 会在云端定时执行；单账号和多账号最终都只需要创建一个名为 `GLADOS_COOKIE` 的 Repository Secret。
 
-#### 1. 使用本仓库或 Fork
+> [!NOTE]
+> Fork 不会继承原仓库的 Secret。Cookie 必须配置在**你自己 Fork 后的仓库**中，不能填在本项目的 Issue、代码或公开日志里。
 
-1. [Fork](https://github.com/Walvez/glados-auto-checkin/fork) 本仓库，或直接在本仓库（若你有写权限）配置 Secrets。
-2. 打开仓库 **Settings → Secrets and variables → Actions**。
-3. 新建 Repository Secret：
+#### 1. Fork 并启用工作流
 
-| Secret 名称 | 必需 | 说明 |
-| :--- | :---: | :--- |
-| `GLADOS_COOKIE` | 是 | 一个或多个账号的 Cookie（格式见下） |
+1. 点击 [Fork 本仓库](https://github.com/Walvez/glados-auto-checkin/fork)，创建到自己的 GitHub 账号下。
+2. 进入 Fork 后的仓库，确认页面左上角显示的是 `你的用户名/glados-auto-checkin`。
+3. 打开仓库顶部的 **Actions**。公开仓库的 Fork 默认可能停用定时工作流；若页面出现提示，请点击启用工作流。
 
-#### 2. 获取 Cookie
+#### 2. 获取每个账号的 Cookie
 
-1. 在浏览器登录 GLaDOS（推荐当前主站 [glados.cloud](https://glados.cloud)，其它 5 个主站域名也可）。
-2. 打开开发者工具 → Application / 存储 → Cookies，或使用 Cookie 编辑扩展。
-3. 复制与会话相关的 Cookie 字符串，通常类似：
+对每个账号分别执行一次：
+
+1. 在准备使用的主站域名登录该账号，例如 [glados.cloud](https://glados.cloud) 或 [glados.rocks](https://glados.rocks)。
+2. 按 `F12` 打开开发者工具，切换到 **Network（网络）**。
+3. 刷新 GLaDOS 页面，点开 `/api/user/status`、`/console` 等发送到当前 GLaDOS 域名的请求。
+4. 在 **Request Headers（请求标头）** 中找到 `Cookie`，复制它的**值**，不要带 `Cookie:` 前缀。通常类似：
 
    ```text
    koa:sess=……; koa:sess.sig=……
    ```
 
-4. 粘贴到 Secret `GLADOS_COOKIE`。**不要**提交到代码仓库或发到 Issue。
+5. 同时记下当前域名。多个账号应分别登录不同域名并分别复制，例如主号来自 `glados.cloud`、小号来自 `glados.rocks`。
 
-#### 3. 多账号格式（稳健）
+Cookie 相当于登录凭据，并且可能在数周后失效。不要截图公开，也不要发送给其他人。
 
-**不要使用 `&` 作为账号分隔符**（Cookie 值本身可能包含 `&`）。请使用下列之一：
+#### 3. 创建 `GLADOS_COOKIE` Secret
 
-**JSON 数组（推荐）**
-
-```json
-["koa:sess=账号1...; koa:sess.sig=...", "koa:sess=账号2...; koa:sess.sig=..."]
-```
-
-或带名称和账号所在域名（不同域名登录不同账号时推荐）：
+1. 在**你 Fork 后的仓库**打开 **Settings → Secrets and variables → Actions**。
+2. 在 **Repository secrets** 区域点击 **New repository secret**。
+3. **Name** 必须填写 `GLADOS_COOKIE`，区分大小写。
+4. **Secret** 中粘贴下面的 JSON。即使只有一个账号，也推荐使用这种格式：
 
 ```json
 [
@@ -159,23 +158,49 @@ curl -fsSL 'https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/he
 ]
 ```
 
-`origin` 可省略；省略后会按内置顺序探测 6 个主站。填写后该账号只向指定的官方域名发送 Cookie 并完成签到，适合各域名分别登录不同账号的情况。仅接受本项目支持的 6 个 HTTPS 主站地址。
+5. 点击 **Add secret**。多个账号也只创建这一个 Secret，不要建立 `GLADOS_COOKIE_1`、`GLADOS_COOKIE_2`。
 
-**逐行（每行一个完整 Cookie）**
+字段说明：
+
+| 字段 | 必需 | 说明 |
+| :--- | :---: | :--- |
+| `name` | 否 | 仅用于在脱敏日志中区分账号，例如“主号”“小号” |
+| `origin` | 推荐 | 该 Cookie 实际来自哪个主站；填写后只向这个官方域名发送凭据 |
+| `cookie` | 是 | 从浏览器请求标头复制的完整 Cookie 值 |
+
+`origin` 只接受本项目支持的 6 个 HTTPS 主站。省略后会自动探测全部主站，但不同域名分别登录不同账号时，建议明确填写。
+
+<details>
+<summary><strong>兼容的其它 Secret 格式</strong></summary>
+
+单账号可以直接填写一整段 Cookie；多账号也支持 Cookie 字符串 JSON 数组或每行一个完整 Cookie：
+
+```json
+["koa:sess=账号1...; koa:sess.sig=...", "koa:sess=账号2...; koa:sess.sig=..."]
+```
 
 ```text
 koa:sess=账号1...; koa:sess.sig=...
 koa:sess=账号2...; koa:sess.sig=...
 ```
 
-空 Secret、空行-only、非法 JSON 会快速失败并退出码为 `1`；日志会脱敏，不会打印完整 Cookie。
+不要使用 `&` 分隔账号，因为 Cookie 值本身可能包含 `&`。空 Secret、非法 JSON 或缺少凭据会直接报错，日志不会打印完整 Cookie。
 
-#### 4. 启用并验证
+</details>
 
-1. 打开 **Actions**，选择 **GLaDOS Check-in**。
-2. 若提示启用工作流，先启用。
-3. 点击 **Run workflow** 手动跑一次，确认为绿色成功。
-4. 默认定时（GitHub `schedule` 使用 **UTC**）：
+#### 4. 手动运行并确认成功
+
+1. 打开仓库顶部 **Actions**。
+2. 在左侧选择 **GLaDOS Check-in**；若看到 **Enable workflow**，先点击启用。
+3. 点击右侧 **Run workflow**，分支保持 `main`，再次点击绿色 **Run workflow**。
+4. 打开刚出现的运行记录，等待 `Run GLaDOS check-in` 完成。
+5. 绿色对勾表示全部账号成功或今日已签到。日志开头会显示识别到的账号数量，但 Cookie 会被脱敏。
+
+一个账号失败时，脚本仍会继续处理其余账号，但整个任务会显示红色，方便及时发现失效 Cookie。
+
+#### 5. 自动运行时间
+
+工作流默认每天运行两次；GitHub `schedule` 使用 **UTC**：
 
 | Cron（UTC） | 北京时间（UTC+8） | 说明 |
 | :--- | :--- | :--- |
@@ -185,9 +210,13 @@ koa:sess=账号2...; koa:sess.sig=...
 同一账号在**同一次运行**内若已成功或已签到，不会再次请求签到。跨两次 schedule 时，若当天已签到，接口会返回“已签到”，退出码仍为 `0`。
 
 > [!WARNING]
-> GitHub 对不活跃或新建 Fork 的 `schedule` 可能延迟甚至不触发；手动 `workflow_dispatch` 始终可用。需要更高可靠度时，可用外部 cron 调用 [workflow_dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)。
+> GitHub 官方说明：公开仓库 Fork 的定时工作流默认停用，且公开仓库连续 60 天无活动时也可能自动停用。若定时任务没有执行，请到 Actions 中重新启用并手动运行一次。定时任务还可能排队延迟，不保证精确到分钟。参见 [GitHub 官方说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows)。
 
-#### 5. 本地 / CLI 调试（可选）
+#### 6. Cookie 失效后如何更新
+
+重新登录对应域名并复制新 Cookie，然后进入 **Settings → Secrets and variables → Actions**，编辑原来的 `GLADOS_COOKIE`，替换该账号的 `cookie` 字段并保存。无需修改工作流文件，也不要新建第二个同名 Secret。
+
+#### 7. 本地 / CLI 调试（可选）
 
 需要 Node.js 18+（Actions 固定当前 LTS 大版本 **24**）：
 
@@ -199,7 +228,7 @@ npm run checkin
 
 可选环境变量 `GLADOS_ORIGIN=https://glados.cloud` 可为未填写 `origin` 的账号指定默认域名；账号对象中的 `origin` 优先。
 
-#### 6. 通知方式
+#### 8. 通知方式
 
 Actions **不内置第三方推送**（避免额外密钥与数据外传）。请依赖：
 
