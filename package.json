@@ -1,8 +1,13 @@
 {
   "name": "glados-auto-checkin",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "test": "node test-glados-surge.js && node test-glados-scriptcat.js"
+    "test": "node test-glados-surge.js && node test-glados-scriptcat.js && node test-glados-actions.js",
+    "checkin": "node cli/checkin.js",
+    "test:actions": "node test-glados-actions.js"
   }
 }

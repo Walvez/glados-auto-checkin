@@ -1,0 +1,43 @@
+# GLaDOS automatic check-in via GitHub Actions
+#
+# Schedule times are UTC. Beijing time (UTC+8) equivalents:
+#   - 23:15 UTC → 07:15 北京时间（次日凌晨前一天的 UTC 对应早上签到）
+#   - 07:15 UTC → 15:15 北京时间
+#
+# GitHub may delay or skip schedule triggers on inactive forks.
+# Use workflow_dispatch for manual runs, or an external cron that POSTs
+# to the workflow_dispatch API if you need more reliable timing.
+
+name: GLaDOS Check-in
+
+on:
+  schedule:
+    # 07:15 Beijing (UTC+8) = 23:15 UTC
+    - cron: "15 23 * * *"
+    # 15:15 Beijing (UTC+8) = 07:15 UTC
+    - cron: "15 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          # Pin current Node.js LTS major version (not a floating alias).
+          node-version: 24
+
+      - name: Run GLaDOS check-in
+        env:
+          # Repository Secret — never echo or print this value.
+          GLADOS_COOKIE: ${{ secrets.GLADOS_COOKIE }}
+        run: node cli/checkin.js

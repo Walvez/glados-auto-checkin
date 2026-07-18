@@ -9,13 +9,14 @@
 # GLaDOS Auto Check-in
 
 Check in automatically every day and receive clear result notifications<br>
-Supports **ScriptCat · Surge · Quantumult X** and all 6 GLaDOS main-site domains: `glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`
+Supports **ScriptCat · Surge · Quantumult X · GitHub Actions** and all 6 GLaDOS main-site domains: `glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](package.json)
 [![ScriptCat](https://img.shields.io/badge/ScriptCat-Install-ff6b35)](https://scriptcat.org/en/script-show-page/7014)
 [![Surge](https://img.shields.io/badge/Surge-Module-5b5bd6)](Surge/glados-auto-checkin.sgmodule)
 [![Quantumult X](https://img.shields.io/badge/Quantumult%20X-Snippet-111111)](QuantumultX/glados-auto-checkin.snippet)
+[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Check-in-2088FF)](.github/workflows/checkin.yml)
 
 [Quick Start](#quick-start) · [Notifications](#notification-examples) · [FAQ](#faq) · [Security](#security-and-privacy)
 
@@ -26,22 +27,24 @@ Supports **ScriptCat · Surge · Quantumult X** and all 6 GLaDOS main-site domai
 
 ## Highlights
 
-- **Three platforms**: standalone support for browsers, Surge, and Quantumult X
-- **No manual cookie entry**: uses your browser session or captures credentials locally through your proxy app
-- **Smart fallback**: skips later runs after a successful check-in on the same day
+- **Multiple platforms**: browsers, Surge, Quantumult X, and GitHub Actions
+- **No manual cookie entry** (local options): uses your browser session or captures credentials via your proxy app
+- **Optional cloud run**: GitHub Actions accepts one or more account cookies via a Repository Secret
+- **Smart fallback**: skips later local tasks after a successful day; within a single Actions run, successful/already-checked accounts are not checked in again
 - **Reliable results**: distinguishes a new check-in from an already completed one and avoids false success reports
 - **Limited retries**: retries network errors, HTTP 429, and 5xx responses once
-- **Privacy-minded**: credentials stay on your device; proxy versions use only built-in notifications
+- **Privacy-minded**: local credentials stay on device; Actions logs redact cookies and never echo secrets
 
 ## Quick Start
 
-Choose one method for your environment. You do not need to install all three.
+Choose one method for your environment. You do not need every option.
 
-| Environment | Best for | MitM | Install |
-| :--- | :--- | :---: | :--- |
-| **Chrome / Edge** | Simple setup and background browser automation | No | [View setup](#chrome--edge) |
-| **Surge** | Users who already route traffic through Surge | Yes | [View setup](#surge) |
-| **Quantumult X** | Users who already route traffic through Quantumult X | Yes | [View setup](#quantumult-x) |
+| Environment | Best for | MitM | Manual cookie | Install |
+| :--- | :--- | :---: | :---: | :--- |
+| **Chrome / Edge** | Simple setup and background browser automation | No | No | [View setup](#chrome--edge) |
+| **Surge** | Users who already route traffic through Surge | Yes | No | [View setup](#surge) |
+| **Quantumult X** | Users who already route traffic through Quantumult X | Yes | No | [View setup](#quantumult-x) |
+| **GitHub Actions** | No always-on device; cloud scheduled check-in | No | Yes (Secret) | [View setup](#github-actions) |
 
 ### Chrome / Edge
 
@@ -101,6 +104,98 @@ curl -fsSL 'https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/he
 4. Keep Quantumult X active, sign in to GLaDOS in your browser, and refresh the page.
 5. After the credential capture notification appears, run `GLaDOS签到` once from the scheduled tasks list.
 
+### GitHub Actions
+
+Use this when you do not keep a local browser or proxy running. The workflow runs a Node.js CLI that reuses this repo’s strict response checks, limited retries, and same-origin check-in flow. The check-in API body token is `glados.cloud` (2026 API).
+
+#### 1. Fork or use this repository
+
+1. [Fork](https://github.com/Walvez/glados-auto-checkin/fork) the repo, or configure Secrets on a repo you control.
+2. Open **Settings → Secrets and variables → Actions**.
+3. Create a Repository Secret:
+
+| Secret name | Required | Description |
+| :--- | :---: | :--- |
+| `GLADOS_COOKIE` | Yes | One or more account cookies (formats below) |
+
+#### 2. Obtain the cookie
+
+1. Sign in to GLaDOS in a browser (preferred site today: [glados.cloud](https://glados.cloud); the other five main domains also work).
+2. Open DevTools → Application / Storage → Cookies, or a cookie editor extension.
+3. Copy the session cookie string, typically:
+
+   ```text
+   koa:sess=...; koa:sess.sig=...
+   ```
+
+4. Paste it into Secret `GLADOS_COOKIE`. **Do not** commit it to git or post it in issues.
+
+#### 3. Multi-account formats (robust)
+
+**Do not use `&` as an account separator** (cookie values may contain `&`). Prefer one of:
+
+**JSON array (recommended)**
+
+```json
+["koa:sess=account1...; koa:sess.sig=...", "koa:sess=account2...; koa:sess.sig=..."]
+```
+
+Or with labels:
+
+```json
+[
+  {"name": "primary", "cookie": "koa:sess=...; koa:sess.sig=..."},
+  {"name": "secondary", "cookie": "koa:sess=...; koa:sess.sig=..."}
+]
+```
+
+**One full cookie per line**
+
+```text
+koa:sess=account1...; koa:sess.sig=...
+koa:sess=account2...; koa:sess.sig=...
+```
+
+Empty secrets, comment-only input, and invalid JSON fail fast with exit code `1`. Logs redact cookie material.
+
+#### 4. Enable and verify
+
+1. Open **Actions** → **GLaDOS Check-in**.
+2. Enable workflows if GitHub prompts you.
+3. Click **Run workflow** once and confirm a green success.
+4. Default schedule (GitHub `schedule` is **UTC**):
+
+| Cron (UTC) | Beijing time (UTC+8) | Role |
+| :--- | :--- | :--- |
+| `15 23 * * *` | **07:15** | Morning candidate |
+| `15 7 * * *` | **15:15** | Afternoon fallback |
+
+Within **one run**, an account that already succeeded or was already checked in is not checked in again. Across the two daily schedules, a second run that receives “already checked in” still exits `0`.
+
+> [!WARNING]
+> GitHub may delay or skip `schedule` on new or inactive forks. `workflow_dispatch` always works. For more reliable timing, an external cron can call the [workflow_dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event).
+
+#### 5. Local / CLI (optional)
+
+Requires Node.js 18+ (Actions pins current LTS major **24**):
+
+```bash
+export GLADOS_COOKIE='koa:sess=...; koa:sess.sig=...'
+npm run checkin
+# or: node cli/checkin.js
+```
+
+Optional: `GLADOS_ORIGIN=https://glados.cloud` forces a single domain.
+
+#### 6. Notifications
+
+Actions **does not** embed third-party push services (no extra secrets or data egress). Rely on:
+
+- Job success/failure status (any account failure → exit code `1`, red job)
+- Your GitHub notification settings for Actions
+
+If you add push yourself, keep it optional, minimize payload fields, and add tests.
+
 ## Notification Examples
 
 The scripts distinguish a new successful check-in from one already completed earlier that day.
@@ -135,6 +230,7 @@ Detect session → Request check-in → Validate response → Read points and ex
 
 - ScriptCat probes the 6 main-site domains in order (`glados.network` → `glados.rocks` → `glados.one` → `glados.space` → `glados.cloud` → `glados.vip`) and completes the check-in on the same domain where it finds an active session.
 - Surge and Quantumult X capture credentials and the active origin from any of those main sites via MitM, and always send check-in requests to that same domain. They run at `07:15` and `15:15` by default. A successful morning run records the local daily state, so the afternoon run exits silently.
+- GitHub Actions / CLI use the cookie secret, probe the 6 domains with `glados.cloud` first, and complete check-in on the **same logged-in origin**. The body token is `glados.cloud`.
 - Unknown responses, HTML error pages, 401/403, 429, and 5xx responses are handled separately. Success is reported only when the script recognizes a check-in record or an explicit success state.
 
 ## Custom Schedule
@@ -151,12 +247,13 @@ The default Cron expression is `15 7,15 * * *`, meaning 07:15 and 15:15 every da
 ## Security and Privacy
 
 > [!IMPORTANT]
-> Do not publish proxy configuration files, logs, or persistent data. They may contain authentication credentials.
+> Do not publish proxy configuration files, logs, Actions log screenshots, or Secret values. They may contain authentication credentials.
 
 - ScriptCat uses your existing browser session and does not explicitly read, store, or upload your GLaDOS cookies.
 - Surge and Quantumult X store the cookie, authorization value, and active domain only in the proxy app's local persistent storage, and send them only to the corresponding official GLaDOS main-site domain (one of the 6 listed above).
 - Surge and Quantumult X do not call third-party notification services.
 - When explicitly enabled, ScriptCat remote notifications contain only a masked email, check-in result, points, and remaining days. They never include GLaDOS cookies or authorization values.
+- **GitHub Actions**: cookies live only in Repository Secret `GLADOS_COOKIE`; workflow permissions are minimal (`contents: read`); the CLI redacts cookies/Bearer tokens and the workflow never echoes the Secret. After forking, set Secrets on **your** repository—never put cookies in code or pull requests.
 - The project includes no analytics, advertisements, referral links, or third-party executable code.
 
 <details>
@@ -199,19 +296,42 @@ No. The scripts support all 6 GLaDOS main-site domains (`glados.network`, `glado
 <details>
 <summary><strong>Are my credentials uploaded?</strong></summary>
 
-No. Credentials are used only inside your browser or proxy app and are sent only to the corresponding official GLaDOS domain. See [Security and Privacy](#security-and-privacy) for details.
+Local options: credentials stay in the browser or proxy app and are sent only to the matching official GLaDOS domain.
+
+GitHub Actions: credentials stay in your repository Secret and are sent only to official GLaDOS domains at runtime—they are not committed to git. See [Security and Privacy](#security-and-privacy).
+
+</details>
+
+<details>
+<summary><strong>GitHub Actions keeps failing / asks me to sign in</strong></summary>
+
+The cookie may have expired (often after several weeks) or been copied incompletely. Sign in again at [glados.cloud](https://glados.cloud) (or another main site), update Secret `GLADOS_COOKIE`, and **Run workflow** manually. Cookies usually do not work across domains; the CLI probes all 6.
+
+</details>
+
+<details>
+<summary><strong>I see “please checkin via https://glados.cloud”</strong></summary>
+
+That is the typical 2026 API change: the check-in body token must be `glados.cloud`. This repo’s CLI and scripts already use that token. Older scripts that still send `glados.one` need updating.
+
+</details>
+
+<details>
+<summary><strong>The Actions schedule never runs</strong></summary>
+
+GitHub may not fire `schedule` on new or inactive forks. Use **Run workflow** to validate, or trigger `workflow_dispatch` from an external cron. Workflow comments and the table above document UTC vs Beijing time.
 
 </details>
 
 ## Development and Testing
 
-Node.js is required. After cloning the repository, run:
+Node.js 18+ is required. After cloning the repository, run:
 
 ```bash
 npm test
 ```
 
-Tests cover all 6 main-site domains, Surge and Quantumult X runtimes, already-completed responses, invalid JSON, 401/403 handling, 429 retries, partial success with 5xx responses, daily skips, config hostname/regex coverage, stable update URLs, and notification boundaries.
+Tests cover all 6 main-site domains, Surge and Quantumult X runtimes, GitHub Actions / CLI (multi-account, missing secrets, domain fallback, cookie redaction, success / already-checked / failure exit codes), already-completed responses, invalid JSON, 401/403 handling, 429 retries, 5xx handling, daily skips, config hostname/regex coverage, stable update URLs, and notification boundaries.
 
 ### Project Structure
 
@@ -219,6 +339,11 @@ Tests cover all 6 main-site domains, Surge and Quantumult X runtimes, already-co
 .
 ├── glados.auto-checkin.scriptcat.user.js  # ScriptCat browser script
 ├── glados.autosign.surge.js               # Shared Surge / Quantumult X script
+├── lib/glados-core.js                     # Shared validation and credential parsing
+├── cli/checkin.js                         # Node.js CLI / Actions entry
+├── .github/workflows/
+│   ├── checkin.yml                        # Scheduled + manual check-in
+│   └── test.yml                           # Push / PR tests
 ├── Surge/
 │   └── glados-auto-checkin.sgmodule       # Surge module
 ├── QuantumultX/
