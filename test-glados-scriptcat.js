@@ -10,6 +10,14 @@ function response(body, status = 200) {
   return { status, response: body, responseText: JSON.stringify(body) };
 }
 
+const DOMAIN_ORDER = ["network", "rocks", "one", "space", "cloud", "vip"];
+
+function statusScan(loggedIn = {}) {
+  return DOMAIN_ORDER.map((domain) =>
+    loggedIn[domain] || response({ code: -2, message: "Not logged in" })
+  );
+}
+
 async function runScript(responses, extraContext = {}) {
   const notifications = [];
   const logs = [];
@@ -52,16 +60,18 @@ async function runScript(responses, extraContext = {}) {
 
 async function testSuccessfulCheckin() {
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: 441.9 } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 441.9 } }),
+    }),
     response({ list: [{ change: "10.00000000", balance: "128.50000000" }] }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 2);
+  assert.equal(result.requests.length, 7);
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
-  assert.equal(result.requests[1].url, "https://glados.network/api/user/checkin");
-  assert.equal(result.requests[1].anonymous, false);
-  assert.equal(JSON.parse(result.requests[1].data).token, "glados.network");
+  assert.equal(result.requests[6].url, "https://glados.network/api/user/checkin");
+  assert.equal(result.requests[6].anonymous, false);
+  assert.equal(JSON.parse(result.requests[6].data).token, "glados.network");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS · us***r@example.com");
   assert.match(result.notifications[0].text, /^签到成功！\n今日签到获得10积分，共128\.5积分/);
@@ -70,18 +80,19 @@ async function testSuccessfulCheckin() {
 
 async function testFallsBackToRocksLogin() {
   const result = await runScript([
-    response({ code: -2, message: "Not logged in" }),
-    response({ code: 0, data: { email: "rocks@example.com", leftDays: 88 } }),
+    ...statusScan({
+      rocks: response({ code: 0, data: { email: "rocks@example.com", leftDays: 88 } }),
+    }),
     response({ list: [{ change: 9, balance: 99 }] }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 3);
+  assert.equal(result.requests.length, 7);
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
   assert.equal(result.requests[1].url, "https://glados.rocks/api/user/status");
-  assert.equal(result.requests[2].url, "https://glados.rocks/api/user/checkin");
-  assert.equal(result.requests[2].headers.Origin, "https://glados.rocks");
-  assert.equal(JSON.parse(result.requests[2].data).token, "glados.rocks");
+  assert.equal(result.requests[6].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(result.requests[6].headers.Origin, "https://glados.rocks");
+  assert.equal(JSON.parse(result.requests[6].data).token, "glados.rocks");
   assert.equal(result.notifications[0].title, "GLaDOS · ro***s@example.com");
 }
 
@@ -90,26 +101,16 @@ async function testFindsSessionOnAdditionalMainDomains() {
 
   for (const domain of domains) {
     const origin = `https://glados.${domain}`;
-    const notLoggedIn = response({ code: -2, message: "Not logged in" });
-    // network, rocks, then each prior extra domain until the target
-    const priorFailures = [];
-    const allOrdered = ["network", "rocks", "one", "space", "cloud", "vip"];
-    for (const host of allOrdered) {
-      if (host === domain) {
-        break;
-      }
-      priorFailures.push(notLoggedIn);
-    }
-
     const result = await runScript([
-      ...priorFailures,
-      response({ code: 0, data: { email: `${domain}@example.com`, leftDays: 50 } }),
+      ...statusScan({
+        [domain]: response({ code: 0, data: { email: `${domain}@example.com`, leftDays: 50 } }),
+      }),
       response({ list: [{ change: 5, balance: 100 }] }),
     ]);
 
     assert.equal(result.error, undefined, `domain ${domain} should succeed`);
-    const statusRequest = result.requests[result.requests.length - 2];
-    const checkinRequest = result.requests[result.requests.length - 1];
+    const statusRequest = result.requests.find((item) => item.url === `${origin}/api/user/status`);
+    const checkinRequest = result.requests[6];
     assert.equal(statusRequest.url, `${origin}/api/user/status`);
     assert.equal(checkinRequest.url, `${origin}/api/user/checkin`);
     assert.equal(checkinRequest.headers.Origin, origin);
@@ -117,9 +118,68 @@ async function testFindsSessionOnAdditionalMainDomains() {
   }
 }
 
+async function testChecksInDifferentAccountsAcrossDomains() {
+  const result = await runScript([
+    ...statusScan({
+      network: response({ code: 0, data: { email: "first@example.com", leftDays: 100 } }),
+      rocks: response({ code: 0, data: { email: "second@example.com", leftDays: 200 } }),
+    }),
+    response({ list: [{ change: 5, balance: 50 }] }),
+    response({ message: "Please Try Tomorrow", code: 1, points: 0 }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.requests.length, 8);
+  assert.equal(result.requests[6].url, "https://glados.network/api/user/checkin");
+  assert.equal(result.requests[7].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(JSON.parse(result.requests[6].data).token, "glados.network");
+  assert.equal(JSON.parse(result.requests[7].data).token, "glados.rocks");
+  assert.equal(result.notifications.length, 1);
+  assert.equal(result.notifications[0].title, "GLaDOS 多账号签到完成");
+  assert.match(result.notifications[0].text, /成功\/已签到 2\/2 个已发现账号/);
+  assert.match(result.notifications[0].text, /fi\*\*\*t@example\.com/);
+  assert.match(result.notifications[0].text, /se\*\*\*d@example\.com/);
+}
+
+async function testDeduplicatesSameAccountAcrossDomains() {
+  const result = await runScript([
+    ...statusScan({
+      network: response({ code: 0, data: { email: "same@example.com", leftDays: 50 } }),
+      rocks: response({ code: 0, data: { email: "SAME@example.com", leftDays: 50 } }),
+    }),
+    response({ list: [{ change: 2, balance: 20 }] }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.requests.length, 7);
+  assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 1);
+  assert.equal(result.requests[6].url, "https://glados.network/api/user/checkin");
+  assert.match(result.logs.map((item) => item.message).join("\n"), /同一账号/);
+}
+
+async function testMultiAccountPartialFailureContinuesAndSummarizes() {
+  const result = await runScript([
+    ...statusScan({
+      network: response({ code: 0, data: { email: "good@example.com", leftDays: 10 } }),
+      rocks: response({ code: 0, data: { email: "bad@example.com", leftDays: 20 } }),
+    }),
+    response({ list: [{ change: 3, balance: 30 }] }),
+    response({ code: -1, message: "server maintenance" }),
+  ]);
+
+  assert.match(result.error.message, /未全部完成/);
+  assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 2);
+  assert.equal(result.notifications.length, 1);
+  assert.equal(result.notifications[0].title, "GLaDOS 多账号签到未全部完成");
+  assert.match(result.notifications[0].text, /成功\/已签到 1\/2 个已发现账号/);
+  assert.match(result.notifications[0].text, /失败：签到接口返回异常/);
+}
+
 async function testAlreadyCheckedIn() {
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    }),
     response({
       code: 1,
       message: " Please   Try Tomorrow! ",
@@ -136,7 +196,9 @@ async function testAlreadyCheckedIn() {
 
 async function testAlreadyCheckedInChineseMessage() {
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    }),
     response({ message: "今天已经签到，请明天再试" }),
   ]);
 
@@ -146,7 +208,9 @@ async function testAlreadyCheckedInChineseMessage() {
 
 async function testCurrentAlreadyCheckedInResponse() {
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: 426 } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 426 } }),
+    }),
     response({
       code: 1,
       points: 0,
@@ -211,7 +275,9 @@ async function testNetworkFailureNotifies() {
 
 async function testUnknownCheckinResponseFailsClosed() {
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    }),
     response({ code: -1, message: "server maintenance" }),
   ]);
 
@@ -224,25 +290,29 @@ async function testUnknownCheckinResponseFailsClosed() {
 async function testInvalidJsonFailsClosed() {
   const invalid = { status: 200, response: null, responseText: "<html>bad gateway</html>" };
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    }),
     invalid,
     invalid,
   ]);
 
   assert.match(result.error.message, /无法解析/);
-  assert.equal(result.requests.length, 3);
+  assert.equal(result.requests.length, 8);
   assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
 }
 
 async function testRetriesHttp429() {
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+    }),
     response({ message: "rate limited" }, 429),
     response({ list: [{ change: 3, balance: 30 }] }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 3);
+  assert.equal(result.requests.length, 8);
   assert.match(result.notifications[0].text, /签到成功/);
 }
 
@@ -265,7 +335,9 @@ async function testHttp403PromptsLoginWithoutRetry() {
 
 async function testExplicitSuccessWithoutPointRecord() {
   const result = await runScript([
-    response({ code: 0, data: { email: "user@example.com", leftDays: null } }),
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: null } }),
+    }),
     response({ code: 0, message: "Checkin success" }),
   ]);
 
@@ -278,7 +350,9 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
   const values = { glados_notify_pushdeer: "push-key" };
   const result = await runScript(
     [
-      response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+      ...statusScan({
+        network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+      }),
       response({ list: [{ change: 3, balance: 30 }] }),
       response({ code: 0 }),
     ],
@@ -288,12 +362,12 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
   );
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 3);
-  assert.equal(result.requests[2].url, "https://api2.pushdeer.com/message/push");
-  assert.equal(result.requests[2].anonymous, true);
-  assert.equal(result.requests[2].headers.Cookie, undefined);
-  assert.doesNotMatch(result.requests[2].data, /user@example\.com/);
-  assert.match(result.requests[2].data, /us\*\*\*r@example\.com/);
+  assert.equal(result.requests.length, 8);
+  assert.equal(result.requests[7].url, "https://api2.pushdeer.com/message/push");
+  assert.equal(result.requests[7].anonymous, true);
+  assert.equal(result.requests[7].headers.Cookie, undefined);
+  assert.doesNotMatch(result.requests[7].data, /user@example\.com/);
+  assert.match(result.requests[7].data, /us\*\*\*r@example\.com/);
 }
 
 async function testAdditionalRemoteNotificationChannels() {
@@ -306,7 +380,9 @@ async function testAdditionalRemoteNotificationChannels() {
   };
   const result = await runScript(
     [
-      response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+      ...statusScan({
+        network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
+      }),
       response({ list: [{ change: 3, balance: 30 }] }),
       response({ code: 0 }),
       response({ code: 0 }),
@@ -320,8 +396,8 @@ async function testAdditionalRemoteNotificationChannels() {
   );
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 7);
-  const remote = result.requests.slice(2);
+  assert.equal(result.requests.length, 12);
+  const remote = result.requests.slice(7);
   assert.deepEqual(
     remote.map((item) => item.url),
     [
@@ -369,6 +445,9 @@ async function testAdditionalRemoteNotificationChannels() {
   await testSuccessfulCheckin();
   await testFallsBackToRocksLogin();
   await testFindsSessionOnAdditionalMainDomains();
+  await testChecksInDifferentAccountsAcrossDomains();
+  await testDeduplicatesSameAccountAcrossDomains();
+  await testMultiAccountPartialFailureContinuesAndSummarizes();
   await testAlreadyCheckedIn();
   await testAlreadyCheckedInChineseMessage();
   await testCurrentAlreadyCheckedInResponse();

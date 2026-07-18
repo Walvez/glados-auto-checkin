@@ -5,7 +5,7 @@
  * Env:
  *   GLADOS_COOKIE   Required. One cookie, newline-separated cookies, or JSON array.
  *   GLADOS_COOKIES  Alias of GLADOS_COOKIE.
- *   GLADOS_ORIGIN   Optional. Force a single origin (e.g. https://glados.cloud).
+ *   GLADOS_ORIGIN   Optional. Default origin override for accounts without their own origin.
  *
  * Exit codes:
  *   0 — every account succeeded or was already checked in
@@ -143,8 +143,9 @@ function readCookieSecret(env) {
 async function findLoggedInSession(account, request, origins) {
   let lastError = null;
   let loginMessage = "";
+  const accountOrigins = account.origin ? [account.origin] : origins;
 
-  for (const origin of origins) {
+  for (const origin of accountOrigins) {
     try {
       const response = await request("GET", `${origin}/api/user/status`, {
         headers: buildStatusHeaders(origin, account.cookie, account.authorization),
@@ -338,7 +339,7 @@ async function main(argv = process.argv.slice(2), options = {}) {
       "Environment:",
       "  GLADOS_COOKIE   Cookie secret (JSON array, newline-separated, or single cookie)",
       "  GLADOS_COOKIES  Alias of GLADOS_COOKIE",
-      "  GLADOS_ORIGIN   Optional single origin override",
+      "  GLADOS_ORIGIN   Optional default origin for entries without an origin field",
       "",
       "Exit codes: 0 success/already-checked for all accounts; 1 otherwise",
     ].join("\n");

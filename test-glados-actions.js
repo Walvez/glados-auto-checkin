@@ -99,12 +99,14 @@ function testParseAccountsNewline() {
 function testParseAccountsObjectArray() {
   const accounts = parseAccounts(
     JSON.stringify([
-      { cookie: sampleCookie("work"), name: "work" },
+      { cookie: sampleCookie("work"), name: "work", origin: "https://glados.rocks/" },
       { cookie: sampleCookie("home"), name: "home" },
     ])
   );
   assert.equal(accounts[0].name, "work");
+  assert.equal(accounts[0].origin, "https://glados.rocks");
   assert.equal(accounts[1].name, "home");
+  assert.equal(accounts[1].origin, "");
 }
 
 function testParseAccountsRejectsEmpty() {
@@ -113,6 +115,10 @@ function testParseAccountsRejectsEmpty() {
   assert.throws(() => parseAccounts("[]"), /不能为空/);
   assert.throws(() => parseAccounts('["unterminated"'), /JSON 数组格式无效/);
   assert.throws(() => parseAccounts("short"), /Cookie 过短/);
+  assert.throws(
+    () => parseAccounts(JSON.stringify({ cookie: sampleCookie("bad-origin"), origin: "https://evil.example" })),
+    /origin 不受支持/
+  );
 }
 
 function testParseAccountsDoesNotSplitOnAmpersand() {
@@ -252,6 +258,39 @@ async function testDomainFallbackSameOriginCheckin() {
   assert.equal(fetchImpl.calls[2].url, "https://glados.rocks/api/user/status");
   assert.equal(fetchImpl.calls[3].url, "https://glados.rocks/api/user/checkin");
   assert.equal(fetchImpl.calls[3].init.headers.Origin, "https://glados.rocks");
+  assert.equal(JSON.parse(fetchImpl.calls[3].init.body).token, "glados.rocks");
+}
+
+async function testMultiAccountUsesEachBoundOrigin() {
+  const fetchImpl = buildFetch([
+    jsonResponse({ code: 0, data: { email: "cloud@example.com", leftDays: 10 } }),
+    jsonResponse({ list: [{ change: 1, balance: 10 }] }),
+    jsonResponse({ code: 0, data: { email: "rocks@example.com", leftDays: 20 } }),
+    jsonResponse({ list: [{ change: 2, balance: 20 }] }),
+  ]);
+  const accounts = [
+    { name: "cloud-account", origin: "https://glados.cloud", cookie: sampleCookie("cloud") },
+    { name: "rocks-account", origin: "https://glados.rocks", cookie: sampleCookie("rocks") },
+  ];
+  const outcome = await runCheckin({
+    env: { GLADOS_COOKIE: JSON.stringify(accounts) },
+    logger: createLogger(),
+    fetch: fetchImpl,
+    sleep: async () => {},
+  });
+
+  assert.equal(outcome.exitCode, 0);
+  assert.equal(outcome.results.length, 2);
+  assert.deepEqual(
+    fetchImpl.calls.map((call) => call.url),
+    [
+      "https://glados.cloud/api/user/status",
+      "https://glados.cloud/api/user/checkin",
+      "https://glados.rocks/api/user/status",
+      "https://glados.rocks/api/user/checkin",
+    ]
+  );
+  assert.equal(JSON.parse(fetchImpl.calls[1].init.body).token, "glados.cloud");
   assert.equal(JSON.parse(fetchImpl.calls[3].init.body).token, "glados.rocks");
 }
 
@@ -428,7 +467,7 @@ function testWorkflowYamlStructure() {
 
 function testPackageScriptsAndVersion() {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
-  assert.equal(pkg.version, "1.4.1");
+  assert.equal(pkg.version, "1.5.0");
   assert.match(pkg.scripts.test, /test-glados-actions/);
   assert.match(pkg.scripts["checkin"], /cli\/checkin\.js/);
 }
@@ -462,6 +501,7 @@ async function run() {
     ["successful single account", testSuccessfulSingleAccount],
     ["already checked exit 0", testAlreadyCheckedInExitZero],
     ["domain fallback same origin", testDomainFallbackSameOriginCheckin],
+    ["multi-account uses bound origins", testMultiAccountUsesEachBoundOrigin],
     ["forced origin", testForcedOrigin],
     ["multi-account partial failure", testMultiAccountPartialFailureExitOne],
     ["cookie not leaked on error", testCookieNotLeakedOnHttpErrorBody],

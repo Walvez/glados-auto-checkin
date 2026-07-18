@@ -12,7 +12,7 @@ Check in automatically every day and receive clear result notifications<br>
 Supports **ScriptCat · Surge · Quantumult X · GitHub Actions** and all 6 GLaDOS main-site domains: `glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.1-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](package.json)
 [![ScriptCat](https://img.shields.io/badge/ScriptCat-Install-ff6b35)](https://scriptcat.org/en/script-show-page/7014)
 [![Surge](https://img.shields.io/badge/Surge-Module-5b5bd6)](Surge/glados-auto-checkin.sgmodule)
 [![Quantumult X](https://img.shields.io/badge/Quantumult%20X-Snippet-111111)](QuantumultX/glados-auto-checkin.snippet)
@@ -28,6 +28,7 @@ Supports **ScriptCat · Surge · Quantumult X · GitHub Actions** and all 6 GLaD
 ## Highlights
 
 - **Multiple platforms**: browsers, Surge, Quantumult X, and GitHub Actions
+- **Multiple accounts**: ScriptCat checks different accounts logged in on different main-site domains; GitHub Actions accepts multiple cookies with per-account domains
 - **No manual cookie entry** (local options): uses your browser session or captures credentials via your proxy app
 - **Optional cloud run**: GitHub Actions accepts one or more account cookies via a Repository Secret
 - **Smart fallback**: skips later local tasks after a successful day; within a single Actions run, successful/already-checked accounts are not checked in again
@@ -39,12 +40,12 @@ Supports **ScriptCat · Surge · Quantumult X · GitHub Actions** and all 6 GLaD
 
 Choose one method for your environment. You do not need every option.
 
-| Environment | Best for | MitM | Manual cookie | Install |
-| :--- | :--- | :---: | :---: | :--- |
-| **Chrome / Edge** | Simple setup and background browser automation | No | No | [View setup](#chrome--edge) |
-| **Surge** | Users who already route traffic through Surge | Yes | No | [View setup](#surge) |
-| **Quantumult X** | Users who already route traffic through Quantumult X | Yes | No | [View setup](#quantumult-x) |
-| **GitHub Actions** | No always-on device; cloud scheduled check-in | No | Yes (Secret) | [View setup](#github-actions) |
+| Method | Account support | Key difference | Recommended use | MitM | Manual cookie | Install |
+| :--- | :--- | :--- | :--- | :---: | :---: | :--- |
+| **This ScriptCat script** | Multiple accounts on different main-site domains | Reuses browser sessions without copying cookies | Multiple accounts; regular Chrome / Edge use | No | No | [View setup](#chrome--edge) |
+| **Surge module** | One account; the latest captured account replaces the previous one | Runs locally without a background browser | Regular Surge use with one account | Yes | No | [View setup](#surge) |
+| **Quantumult X config** | One account; the latest captured account replaces the previous one | Fits an existing Rewrite and scheduled-task setup | Regular Quantumult X use with one account | Yes | No | [View setup](#quantumult-x) |
+| **GitHub Actions** | Multiple accounts with an optional domain per account | Runs in the cloud without a browser or proxy app | Multiple accounts; no always-on local device | No | Yes (Secret) | [View setup](#github-actions) |
 
 ### Chrome / Edge
 
@@ -53,9 +54,12 @@ The browser version is a background scheduled script for [ScriptCat](https://doc
 1. Install ScriptCat from the [Chrome Web Store](https://chromewebstore.google.com/detail/scriptcat/ndcooeababalnlpkfedmmbbbgkljhpjf) or [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/scriptcat/liilgpjgabokdklappibcjfablkpcekh).
 2. Open the [GLaDOS Auto Check-in script page](https://scriptcat.org/en/script-show-page/7014) and select Install.
 3. Sign in to any GLaDOS main site in the same browser, for example [glados.network](https://glados.network/). Also supported: `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, and `glados.vip` (not the defunct `glados.live` or the promo redirect `glados.top`).
-4. Make sure the script is enabled in ScriptCat. A manual first run is recommended.
+4. For multiple accounts, sign in to a different account on each main-site domain—for example, account A on `glados.network` and account B on `glados.rocks`.
+5. Make sure the script is enabled in ScriptCat. A manual first run is recommended.
 
-The script schedules candidate runs every five minutes from `00:05` through `23:55`. After the first successful run, ScriptCat's `once` mechanism skips the remaining candidates. It will normally catch up within five minutes after the browser starts, or within ten minutes around the top of an hour.
+The script schedules candidate runs every five minutes from `00:05` through `23:55`. Each run scans all six domains, deduplicates sessions by email, and checks in every discovered account. ScriptCat's `once` mechanism skips later candidates only after all discovered accounts complete; partial network failures remain eligible for a later retry.
+
+ScriptCat does not store account cookies. Once you sign out of a domain or its session expires, that domain's account is no longer discovered or checked in.
 
 > [!TIP]
 > If your session expires, click the notification to open the GLaDOS sign-in page. ScriptCat's run status contains logs for troubleshooting failed runs.
@@ -73,6 +77,9 @@ The script schedules candidate runs every five minutes from `00:05` through `23:
 4. Setup is complete when you receive the credential capture notification.
 
 The default schedule checks in at `07:15`, with a fallback run at `15:15` only if the morning run did not succeed. Sign in again or refresh GLaDOS whenever your credentials change.
+
+> [!IMPORTANT]
+> The Surge module currently stores one account. Capturing another account replaces the previous credentials; this release does not change that behavior.
 
 <details>
 <summary><strong>Run an immediate manual test</strong></summary>
@@ -104,9 +111,12 @@ curl -fsSL 'https://raw.githubusercontent.com/Walvez/glados-auto-checkin/refs/he
 4. Keep Quantumult X active, sign in to GLaDOS in your browser, and refresh the page.
 5. After the credential capture notification appears, run `GLaDOS签到` once from the scheduled tasks list.
 
+> [!IMPORTANT]
+> The Quantumult X setup currently stores one account. Capturing another account replaces the previous credentials; this release does not change that behavior.
+
 ### GitHub Actions
 
-Use this when you do not keep a local browser or proxy running. The workflow runs a Node.js CLI that reuses this repo’s strict response checks, limited retries, and same-origin check-in flow. The check-in API body token is derived from the active request hostname (for example, `glados.rocks` for requests to `glados.rocks`).
+Use this when you do not keep a local browser or proxy running. The workflow natively supports multiple accounts: each entry can pin its own login domain or omit it for automatic probing. The check-in API body token is derived from the active request hostname (for example, `glados.rocks` for requests to `glados.rocks`).
 
 #### 1. Fork or use this repository
 
@@ -140,14 +150,16 @@ Use this when you do not keep a local browser or proxy running. The workflow run
 ["koa:sess=account1...; koa:sess.sig=...", "koa:sess=account2...; koa:sess.sig=..."]
 ```
 
-Or with labels:
+Or with labels and the domain used by each account (recommended when different domains hold different accounts):
 
 ```json
 [
-  {"name": "primary", "cookie": "koa:sess=...; koa:sess.sig=..."},
-  {"name": "secondary", "cookie": "koa:sess=...; koa:sess.sig=..."}
+  {"name": "primary", "origin": "https://glados.cloud", "cookie": "koa:sess=...; koa:sess.sig=..."},
+  {"name": "secondary", "origin": "https://glados.rocks", "cookie": "koa:sess=...; koa:sess.sig=..."}
 ]
 ```
+
+`origin` is optional. When present, that account's credentials are sent only to the selected supported GLaDOS domain. Without it, the CLI probes all six supported domains in its normal order.
 
 **One full cookie per line**
 
@@ -185,7 +197,7 @@ npm run checkin
 # or: node cli/checkin.js
 ```
 
-Optional: `GLADOS_ORIGIN=https://glados.cloud` forces a single domain.
+Optional: `GLADOS_ORIGIN=https://glados.cloud` supplies a default domain for entries without `origin`; a per-account `origin` takes priority.
 
 #### 6. Notifications
 
@@ -228,9 +240,9 @@ Detect session → Request check-in → Validate response → Read points and ex
  Multi-domain      Limited retries
 ```
 
-- ScriptCat probes the 6 main-site domains in order (`glados.network` → `glados.rocks` → `glados.one` → `glados.space` → `glados.cloud` → `glados.vip`) and completes the check-in on the same domain where it finds an active session.
-- Surge and Quantumult X capture credentials and the active origin from any of those main sites via MitM, and always send check-in requests to that same domain. They run at `07:15` and `15:15` by default. A successful morning run records the local daily state, so the afternoon run exits silently.
-- GitHub Actions / CLI use the cookie secret, probe the 6 domains with `glados.cloud` first, and complete check-in on the **same logged-in origin**. The body token always matches the actual request hostname.
+- ScriptCat scans all 6 main-site domains (`glados.network` → `glados.rocks` → `glados.one` → `glados.space` → `glados.cloud` → `glados.vip`), collects active sessions, deduplicates them by email, and checks each account in on its original domain before sending one summary notification.
+- Surge and Quantumult X capture credentials and the active origin from any of those main sites via MitM, and always send check-in requests to that same domain. Both remain single-account methods: newly captured credentials replace the previous account. They run at `07:15` and `15:15` by default.
+- GitHub Actions / CLI use the cookie secret. An account object with `origin` uses only that domain; entries without one probe all 6 domains with `glados.cloud` first. Each account checks in on its own logged-in origin, and the body token always matches the actual request hostname.
 - Unknown responses, HTML error pages, 401/403, 429, and 5xx responses are handled separately. Success is reported only when the script recognizes a check-in record or an explicit success state.
 
 ## Custom Schedule
@@ -331,7 +343,7 @@ Node.js 18+ is required. After cloning the repository, run:
 npm test
 ```
 
-Tests cover all 6 main-site domains, Surge and Quantumult X runtimes, GitHub Actions / CLI (multi-account, missing secrets, domain fallback, cookie redaction, success / already-checked / failure exit codes), already-completed responses, invalid JSON, 401/403 handling, 429 retries, 5xx handling, daily skips, config hostname/regex coverage, stable update URLs, and notification boundaries.
+Tests cover ScriptCat cross-domain multi-account discovery, same-account deduplication and partial-failure isolation, all 6 main-site domains, single-account Surge and Quantumult X runtimes, GitHub Actions / CLI (multi-account, per-account origin, missing secrets, domain fallback, cookie redaction, success / already-checked / failure exit codes), invalid JSON, 401/403 handling, 429 retries, 5xx handling, config hostname/regex coverage, stable update URLs, and notification boundaries.
 
 ### Project Structure
 

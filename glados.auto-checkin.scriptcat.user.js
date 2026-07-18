@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.4.1
-// @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
+// @version      1.5.0
+// @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
 // @crontab      5-55/5 * once * *
@@ -484,7 +484,10 @@ function classifyCheckin(result) {
   throw new Error(`签到接口返回异常${detail ? `：${detail}` : ""}`);
 }
 
-async function findLoggedInSession() {
+async function findLoggedInSessions() {
+  const sessions = [];
+  const seenAccounts = new Set();
+  const probeErrors = [];
   let lastError;
   let authorizationError;
   let loginMessage = "";
@@ -500,7 +503,15 @@ async function findLoggedInSession() {
       });
 
       if (status.code === 0 && status.data) {
-        return { origin, status };
+        const email = String(status.data.email || "").trim().toLowerCase();
+        const accountKey = email || origin;
+        if (!seenAccounts.has(accountKey)) {
+          seenAccounts.add(accountKey);
+          sessions.push({ origin, status });
+        } else {
+          log(`${origin} 与已发现会话属于同一账号，跳过重复签到`);
+        }
+        continue;
       }
 
       loginMessage = status.message || loginMessage;
@@ -508,9 +519,15 @@ async function findLoggedInSession() {
       lastError = error;
       if (error.status === 401 || error.status === 403) {
         authorizationError = error;
+      } else {
+        probeErrors.push({ origin, error });
       }
       log(`${origin} 登录状态检查失败：${error.message}`, "warn");
     }
+  }
+
+  if (sessions.length > 0) {
+    return { sessions, probeErrors };
   }
 
   if (authorizationError && !loginMessage) {
@@ -528,12 +545,9 @@ async function findLoggedInSession() {
   throw new Error(`需要登录：${reason}`);
 }
 
-async function run() {
-  log("开始检查登录状态");
-
-  const { origin, status } = await findLoggedInSession();
-  log(`使用已登录域名：${origin}`);
-
+async function checkinSession({ origin, status }) {
+  const account = maskEmail(status.data.email);
+  log(`${account} 使用已登录域名：${origin}`);
   const result = await requestWithRetry({
     method: "POST",
     url: `${origin}/api/user/checkin`,
@@ -547,25 +561,94 @@ async function run() {
 
   const checkin = classifyCheckin(result);
   if (checkin.kind === "login_expired") {
-    const reason = checkin.message;
-    notifyLogin(reason);
-    throw new Error(`需要登录：${reason}`);
+    throw new Error(`需要登录：${checkin.message}`);
   }
 
-  const account = maskEmail(status.data.email);
   const remaining = Number.parseInt(status.data.leftDays, 10);
   const remainingText = Number.isFinite(remaining) ? `\n剩余${remaining}天` : "";
   const message = checkin.message;
 
-  GM_notification({
-    title: `GLaDOS · ${account}`,
-    text: `${message}${remainingText}`,
-    timeout: 10000,
-  });
   log(`${account}：${message}${remainingText.replace("\n", "，")}`);
-  await sendRemoteNotifications(`GLaDOS · ${account}`, `${message}${remainingText}`);
+  return {
+    account,
+    kind: checkin.kind,
+    message,
+    remainingText,
+    origin,
+  };
+}
 
-  return `${account}：${message}`;
+function resultLine(result) {
+  return `${result.account}：${result.message.replace(/\n/g, "，")}${result.remainingText.replace("\n", "，")}`;
+}
+
+async function run() {
+  log("开始检查全部主站域名的登录状态");
+
+  const { sessions, probeErrors } = await findLoggedInSessions();
+  const results = [];
+  const failures = [];
+
+  for (const session of sessions) {
+    try {
+      results.push(await checkinSession(session));
+    } catch (error) {
+      const account = maskEmail(session.status && session.status.data && session.status.data.email);
+      failures.push({ account, origin: session.origin, error });
+      log(`${account} 签到失败：${error.message}`, "error");
+    }
+  }
+
+  if (sessions.length === 1 && failures.length === 0 && probeErrors.length === 0) {
+    const [result] = results;
+    const text = `${result.message}${result.remainingText}`;
+    GM_notification({
+      title: `GLaDOS · ${result.account}`,
+      text,
+      timeout: 10000,
+    });
+    await sendRemoteNotifications(`GLaDOS · ${result.account}`, text);
+    return `${result.account}：${result.message}`;
+  }
+
+  const lines = results.map(resultLine);
+  failures.forEach(({ account, error }) => lines.push(`${account}：失败：${error.message}`));
+  probeErrors.forEach(({ origin, error }) => {
+    lines.push(`${origin.slice("https://".length)}：登录状态检查失败：${error.message}`);
+  });
+
+  const issueCount = failures.length + probeErrors.length;
+  const title = sessions.length === 1 && failures.length === 1 && probeErrors.length === 0
+    ? "GLaDOS 签到失败"
+    : issueCount > 0
+      ? "GLaDOS 多账号签到未全部完成"
+      : "GLaDOS 多账号签到完成";
+  const summary = [
+    `成功/已签到 ${results.length}/${sessions.length} 个已发现账号`,
+    ...lines,
+  ].join("\n");
+
+  GM_notification({
+    title,
+    text: summary,
+    timeout: issueCount > 0 ? 15000 : 10000,
+    onclick: failures.some(({ error }) => String(error.message).startsWith("需要登录："))
+      ? () => GM_openInTab(LOGIN_URL, true)
+      : undefined,
+  });
+  await sendRemoteNotifications(title, summary);
+
+  if (issueCount > 0) {
+    const details = [
+      ...failures.map(({ account, error }) => `${account}：${error.message}`),
+      ...probeErrors.map(({ origin, error }) => `${origin}：${error.message}`),
+    ].join("；");
+    const error = new Error(`多账号签到未全部完成：${issueCount} 项异常${details ? `；${details}` : ""}`);
+    error.alreadyNotified = true;
+    throw error;
+  }
+
+  return summary;
 }
 
 registerNotificationMenus();
@@ -573,13 +656,15 @@ registerNotificationMenus();
 return run().catch(async (error) => {
   log(error.message || String(error), "error");
   const errorText = error.message || String(error);
-  if (!String(error.message || error).startsWith("需要登录：")) {
+  if (!error.alreadyNotified && !String(error.message || error).startsWith("需要登录：")) {
     GM_notification({
       title: "GLaDOS 签到失败",
       text: `${errorText}\n脚本会在下一个候选时间自动再试。`,
       timeout: 10000,
     });
   }
-  await sendRemoteNotifications("GLaDOS 签到失败", errorText);
+  if (!error.alreadyNotified) {
+    await sendRemoteNotifications("GLaDOS 签到失败", errorText);
+  }
   throw error;
 });
