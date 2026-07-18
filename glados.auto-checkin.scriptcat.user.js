@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         GLaDOS 自动签到（脚本猫）
+// @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
 // @version      1.3.0
 // @description  在脚本猫后台定时签到，通知展示账号、积分与剩余天数；无需复制 Cookie，也无需保持网页打开。
@@ -15,6 +15,10 @@
 // @grant        GM_registerMenuCommand
 // @connect      glados.network
 // @connect      glados.rocks
+// @connect      glados.one
+// @connect      glados.space
+// @connect      glados.cloud
+// @connect      glados.vip
 // @connect      api2.pushdeer.com
 // @connect      sctapi.ftqq.com
 // @connect      api.telegram.org
@@ -32,7 +36,14 @@
 // @supportURL   https://github.com/Walvez/glados-auto-checkin/issues
 // ==/UserScript==
 
-const GLADOS_ORIGINS = ["https://glados.network", "https://glados.rocks"];
+const GLADOS_ORIGINS = [
+  "https://glados.network",
+  "https://glados.rocks",
+  "https://glados.one",
+  "https://glados.space",
+  "https://glados.cloud",
+  "https://glados.vip",
+];
 const LOGIN_URL = "https://glados.network/login";
 const REQUEST_TIMEOUT = 15000;
 const MAX_REQUEST_ATTEMPTS = 2;
@@ -512,7 +523,7 @@ async function findLoggedInSession() {
     throw lastError;
   }
 
-  const reason = loginMessage || "两个 GLaDOS 域名均未读取到登录状态";
+  const reason = loginMessage || "所有 GLaDOS 主站域名均未读取到登录状态";
   notifyLogin(reason);
   throw new Error(`需要登录：${reason}`);
 }

@@ -3,6 +3,15 @@ const AUTH_KEY = "evil_galdosauthorization";
 const ORIGIN_KEY = "evil_gladosorigin";
 const LAST_SUCCESS_KEY = "glados_last_success_date";
 const DEFAULT_ORIGIN = "https://glados.rocks";
+const SUPPORTED_ORIGINS = [
+  "https://glados.network",
+  "https://glados.rocks",
+  "https://glados.one",
+  "https://glados.space",
+  "https://glados.cloud",
+  "https://glados.vip",
+];
+const ORIGIN_HOST_RE = /^https:\/\/glados\.(network|rocks|one|space|cloud|vip)(?:\/|$)/i;
 const SCRIPT_VERSION = "reliability-20260716";
 const MAX_REQUEST_ATTEMPTS = 2;
 const RETRY_DELAY = 1500;
@@ -133,13 +142,13 @@ function maskEmail(email) {
 }
 
 function originFromUrl(url) {
-  const match = /^https:\/\/glados\.(network|rocks)(?:\/|$)/i.exec(url || "");
+  const match = ORIGIN_HOST_RE.exec(url || "");
   return match ? `https://glados.${match[1].toLowerCase()}` : "";
 }
 
 function storedOrigin() {
   const origin = readStore(ORIGIN_KEY);
-  return origin === "https://glados.network" || origin === "https://glados.rocks" ? origin : DEFAULT_ORIGIN;
+  return SUPPORTED_ORIGINS.indexOf(origin) !== -1 ? origin : DEFAULT_ORIGIN;
 }
 
 function todayKey() {
@@ -322,7 +331,7 @@ function checkin() {
   if (!cookie && !authorization) {
     return finishWithNotification(
       "",
-      "请先登录 glados.network 或 glados.rocks 并刷新一次页面，让代理工具获取登录凭据",
+      "请先登录 glados.network / glados.rocks / glados.one / glados.space / glados.cloud / glados.vip 并刷新一次页面，让代理工具获取登录凭据",
       { status: "needs_cookie", version: SCRIPT_VERSION }
     );
   }

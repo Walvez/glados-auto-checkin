@@ -5,6 +5,10 @@ const vm = require("vm");
 
 const scriptPath = path.join(__dirname, "glados.autosign.surge.js");
 
+const SUPPORTED_HOSTS = ["network", "rocks", "one", "space", "cloud", "vip"];
+const SUPPORTED_ORIGINS = SUPPORTED_HOSTS.map((host) => `https://glados.${host}`);
+const DOMAIN_ALT = "network|rocks|one|space|cloud|vip";
+
 function testStableResourceReferencesAndNotificationBoundary() {
   const version = require("./package.json").version;
   const files = [
@@ -44,6 +48,32 @@ function testStableResourceReferencesAndNotificationBoundary() {
   );
   const scriptCatVersion = scriptCat.match(/@version\s+(\d+\.\d+\.\d+)/)?.[1];
   assert.equal(scriptCatVersion, version, "ScriptCat 版本应与 package.json 一致");
+}
+
+function testConfigFilesCoverAllMainDomains() {
+  const module = fs.readFileSync(
+    path.join(__dirname, "Surge/glados-auto-checkin.sgmodule"),
+    "utf8"
+  );
+  const snippet = fs.readFileSync(
+    path.join(__dirname, "QuantumultX/glados-auto-checkin.snippet"),
+    "utf8"
+  );
+  const proxyScript = fs.readFileSync(scriptPath, "utf8");
+
+  const hostList = SUPPORTED_HOSTS.map((host) => `glados.${host}`).join(", ");
+  assert.match(module, new RegExp(`hostname = %APPEND% ${hostList.replace(/\./g, "\\.")}`));
+  assert.match(module, new RegExp(`glados\\\\.\\(${DOMAIN_ALT}\\)`));
+  assert.match(snippet, new RegExp(`^hostname = ${hostList.replace(/\./g, "\\.")}$`, "m"));
+  assert.match(snippet, new RegExp(`glados\\\\.\\(${DOMAIN_ALT}\\)`));
+
+  SUPPORTED_ORIGINS.forEach((origin) => {
+    assert.match(proxyScript, new RegExp(origin.replace(/\./g, "\\.")));
+  });
+  assert.match(proxyScript, new RegExp(`glados\\\\.\\(${DOMAIN_ALT}\\)`));
+  assert.doesNotMatch(module, /glados\.live|glados\.top/);
+  assert.doesNotMatch(snippet, /glados\.live|glados\.top/);
+  assert.doesNotMatch(proxyScript, /glados\.live|glados\.top/);
 }
 
 function runScript(extraContext) {
@@ -112,6 +142,117 @@ async function testCaptureNetworkDomain() {
 
   assert.equal(result.store.evil_gladoscookie, "session=network");
   assert.equal(result.store.evil_gladosorigin, "https://glados.network");
+}
+
+async function testCaptureAllSupportedMainDomains() {
+  for (const host of SUPPORTED_HOSTS) {
+    const origin = `https://glados.${host}`;
+    const result = await runScript({
+      store: {},
+      $request: {
+        method: "GET",
+        url: `${origin}/console/checkin`,
+        headers: { Cookie: `session=${host}` },
+      },
+    });
+
+    assert.equal(result.store.evil_gladoscookie, `session=${host}`);
+    assert.equal(result.store.evil_gladosorigin, origin);
+  }
+}
+
+async function testCronSigninUsesCapturedAdditionalOrigins() {
+  const extraHosts = ["one", "space", "cloud", "vip"];
+
+  for (const host of extraHosts) {
+    const origin = `https://glados.${host}`;
+    let postOptions;
+    let getOptions;
+    const result = await runScript({
+      store: {
+        evil_gladoscookie: `session=${host}`,
+        evil_galdosauthorization: `Bearer ${host}`,
+        evil_gladosorigin: origin,
+      },
+      $httpClient: {
+        post: (options, callback) => {
+          postOptions = options;
+          callback(null, { status: 200 }, JSON.stringify({ list: [{ change: 2, balance: 20 }] }));
+        },
+        get: (options, callback) => {
+          getOptions = options;
+          callback(
+            null,
+            { status: 200 },
+            JSON.stringify({
+              code: 0,
+              data: { email: `${host}@example.com`, leftDays: 10 },
+            })
+          );
+        },
+      },
+    });
+
+    assert.equal(result.doneValue.status, "ok", `origin ${origin} should check in`);
+    assert.equal(postOptions.url, `${origin}/api/user/checkin`);
+    assert.equal(postOptions.headers.Origin, origin);
+    assert.equal(getOptions.url, `${origin}/api/user/status`);
+  }
+}
+
+async function testIgnoresUnsupportedOrigins() {
+  const result = await runScript({
+    store: {},
+    $request: {
+      method: "GET",
+      url: "https://glados.live/console/checkin",
+      headers: { Cookie: "session=live" },
+    },
+  });
+
+  assert.equal(result.store.evil_gladoscookie, "session=live");
+  assert.equal(result.store.evil_gladosorigin, undefined);
+
+  let postOptions;
+  const cron = await runScript({
+    store: {
+      evil_gladoscookie: "session=live",
+      evil_gladosorigin: "https://glados.live",
+    },
+    $httpClient: {
+      post: (options, callback) => {
+        postOptions = options;
+        callback(null, { status: 200 }, JSON.stringify({ list: [{ change: 1, balance: 1 }] }));
+      },
+      get: (_options, callback) => {
+        callback(
+          null,
+          { status: 200 },
+          JSON.stringify({ code: 0, data: { email: "x@example.com", leftDays: 1 } })
+        );
+      },
+    },
+  });
+
+  assert.equal(postOptions.url, "https://glados.rocks/api/user/checkin");
+  assert.equal(postOptions.headers.Origin, "https://glados.rocks");
+  assert.equal(cron.doneValue.status, "ok");
+}
+
+async function testMissingCredentialsMentionsAllMainDomains() {
+  const result = await runScript({
+    store: {},
+    $httpClient: {
+      post: () => {
+        throw new Error("无凭据时不应请求");
+      },
+    },
+  });
+
+  assert.equal(result.doneValue.status, "needs_cookie");
+  SUPPORTED_HOSTS.forEach((host) => {
+    assert.match(result.notifications[0].body, new RegExp(`glados\\.${host}`));
+  });
 }
 
 async function testCaptureCookieFromAnyGladosRequest() {
@@ -466,14 +607,19 @@ const resultNotifications = [];
 
 (async () => {
   testStableResourceReferencesAndNotificationBoundary();
+  testConfigFilesCoverAllMainDomains();
   await testCaptureCookie();
   await testCaptureNetworkDomain();
+  await testCaptureAllSupportedMainDomains();
   await testCaptureCookieFromAnyGladosRequest();
   await testRepeatedCaptureDoesNotNotifyWhenCookieIsUnchanged();
   await testCaptureAuthorizationWithoutCookie();
   await testCronSignin();
+  await testCronSigninUsesCapturedAdditionalOrigins();
   await testCronSigninFormatsDecimalPoints();
   await testCronSigninWithAuthorizationOnly();
+  await testIgnoresUnsupportedOrigins();
+  await testMissingCredentialsMentionsAllMainDomains();
   await testQuantumultXRuntime();
   await testQuantumultXCronSignin();
   await testUnknownCheckinResponseFailsClosed();

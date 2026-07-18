@@ -9,7 +9,7 @@
 # GLaDOS Auto Check-in
 
 Check in automatically every day and receive clear result notifications<br>
-Supports **ScriptCat · Surge · Quantumult X** and both `glados.network` and `glados.rocks`
+Supports **ScriptCat · Surge · Quantumult X** and all 6 GLaDOS main-site domains: `glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](package.json)
@@ -49,7 +49,7 @@ The browser version is a background scheduled script for [ScriptCat](https://doc
 
 1. Install ScriptCat from the [Chrome Web Store](https://chromewebstore.google.com/detail/scriptcat/ndcooeababalnlpkfedmmbbbgkljhpjf) or [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/scriptcat/liilgpjgabokdklappibcjfablkpcekh).
 2. Open the [GLaDOS Auto Check-in script page](https://scriptcat.org/en/script-show-page/7014) and select Install.
-3. Sign in to [glados.network](https://glados.network/) in the same browser. The legacy `glados.rocks` domain is also supported.
+3. Sign in to any GLaDOS main site in the same browser, for example [glados.network](https://glados.network/). Also supported: `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, and `glados.vip` (not the defunct `glados.live` or the promo redirect `glados.top`).
 4. Make sure the script is enabled in ScriptCat. A manual first run is recommended.
 
 The script schedules candidate runs every five minutes from `00:05` through `23:55`. After the first successful run, ScriptCat's `once` mechanism skips the remaining candidates. It will normally catch up within five minutes after the browser starts, or within ten minutes around the top of an hour.
@@ -130,11 +130,11 @@ Open the script menu in ScriptCat and enter credentials for any channels you wan
 ```text
 Detect session → Request check-in → Validate response → Read points and expiry → Notify locally
       ↓                 ↓
- Two domains       Limited retries
+ Multi-domain      Limited retries
 ```
 
-- ScriptCat checks `glados.network` first, then `glados.rocks`, and completes the check-in on the same domain where it finds an active session.
-- Surge and Quantumult X run at `07:15` and `15:15` by default. A successful morning run records the local daily state, so the afternoon run exits silently.
+- ScriptCat probes the 6 main-site domains in order (`glados.network` → `glados.rocks` → `glados.one` → `glados.space` → `glados.cloud` → `glados.vip`) and completes the check-in on the same domain where it finds an active session.
+- Surge and Quantumult X capture credentials and the active origin from any of those main sites via MitM, and always send check-in requests to that same domain. They run at `07:15` and `15:15` by default. A successful morning run records the local daily state, so the afternoon run exits silently.
 - Unknown responses, HTML error pages, 401/403, 429, and 5xx responses are handled separately. Success is reported only when the script recognizes a check-in record or an explicit success state.
 
 ## Custom Schedule
@@ -154,7 +154,7 @@ The default Cron expression is `15 7,15 * * *`, meaning 07:15 and 15:15 every da
 > Do not publish proxy configuration files, logs, or persistent data. They may contain authentication credentials.
 
 - ScriptCat uses your existing browser session and does not explicitly read, store, or upload your GLaDOS cookies.
-- Surge and Quantumult X store the cookie, authorization value, and active domain only in the proxy app's local persistent storage, and send them only to the corresponding official GLaDOS domain.
+- Surge and Quantumult X store the cookie, authorization value, and active domain only in the proxy app's local persistent storage, and send them only to the corresponding official GLaDOS main-site domain (one of the 6 listed above).
 - Surge and Quantumult X do not call third-party notification services.
 - When explicitly enabled, ScriptCat remote notifications contain only a masked email, check-in result, points, and remaining days. They never include GLaDOS cookies or authorization values.
 - The project includes no analytics, advertisements, referral links, or third-party executable code.
@@ -190,9 +190,9 @@ The second run is a fallback. It exits silently if the morning check-in succeede
 </details>
 
 <details>
-<summary><strong>Do I need to configure both domains?</strong></summary>
+<summary><strong>Do I need to configure every domain?</strong></summary>
 
-No. The scripts support both `glados.network` and `glados.rocks`, detect your active session, and use the same domain for check-in. Cookies are not shared between the domains, but each is detected independently.
+No. The scripts support all 6 GLaDOS main-site domains (`glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`), detect your active session, and use the same domain for check-in. Cookies are usually not shared across those domains, but each is detected independently. The defunct `glados.live` and the promo redirect `glados.top` are not included.
 
 </details>
 
@@ -211,7 +211,7 @@ Node.js is required. After cloning the repository, run:
 npm test
 ```
 
-Tests cover both domains, Surge and Quantumult X runtimes, already-completed responses, invalid JSON, 401/403 handling, 429 retries, partial success with 5xx responses, daily skips, stable update URLs, and notification boundaries.
+Tests cover all 6 main-site domains, Surge and Quantumult X runtimes, already-completed responses, invalid JSON, 401/403 handling, 429 retries, partial success with 5xx responses, daily skips, config hostname/regex coverage, stable update URLs, and notification boundaries.
 
 ### Project Structure
 

@@ -83,6 +83,37 @@ async function testFallsBackToRocksLogin() {
   assert.equal(result.notifications[0].title, "GLaDOS · ro***s@example.com");
 }
 
+async function testFindsSessionOnAdditionalMainDomains() {
+  const domains = ["one", "space", "cloud", "vip"];
+
+  for (const domain of domains) {
+    const origin = `https://glados.${domain}`;
+    const notLoggedIn = response({ code: -2, message: "Not logged in" });
+    // network, rocks, then each prior extra domain until the target
+    const priorFailures = [];
+    const allOrdered = ["network", "rocks", "one", "space", "cloud", "vip"];
+    for (const host of allOrdered) {
+      if (host === domain) {
+        break;
+      }
+      priorFailures.push(notLoggedIn);
+    }
+
+    const result = await runScript([
+      ...priorFailures,
+      response({ code: 0, data: { email: `${domain}@example.com`, leftDays: 50 } }),
+      response({ list: [{ change: 5, balance: 100 }] }),
+    ]);
+
+    assert.equal(result.error, undefined, `domain ${domain} should succeed`);
+    const statusRequest = result.requests[result.requests.length - 2];
+    const checkinRequest = result.requests[result.requests.length - 1];
+    assert.equal(statusRequest.url, `${origin}/api/user/status`);
+    assert.equal(checkinRequest.url, `${origin}/api/user/checkin`);
+    assert.equal(checkinRequest.headers.Origin, origin);
+  }
+}
+
 async function testAlreadyCheckedIn() {
   const result = await runScript([
     response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
@@ -136,13 +167,29 @@ async function testCurrentAlreadyCheckedInResponse() {
 }
 
 async function testNeedsLogin() {
+  // Six main-site domains, each reports not logged in (no retry on 200).
   const result = await runScript([
+    response({ code: -2, message: "Not logged in" }),
+    response({ code: -2, message: "Not logged in" }),
+    response({ code: -2, message: "Not logged in" }),
+    response({ code: -2, message: "Not logged in" }),
     response({ code: -2, message: "Not logged in" }),
     response({ code: -2, message: "Not logged in" }),
   ]);
 
   assert.match(result.error.message, /需要登录/);
-  assert.equal(result.requests.length, 2);
+  assert.equal(result.requests.length, 6);
+  assert.deepEqual(
+    result.requests.map((item) => item.url),
+    [
+      "https://glados.network/api/user/status",
+      "https://glados.rocks/api/user/status",
+      "https://glados.one/api/user/status",
+      "https://glados.space/api/user/status",
+      "https://glados.cloud/api/user/status",
+      "https://glados.vip/api/user/status",
+    ]
+  );
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 需要重新登录");
   result.notifications[0].onclick();
@@ -150,15 +197,12 @@ async function testNeedsLogin() {
 }
 
 async function testNetworkFailureNotifies() {
-  const result = await runScript([
-    new Error("offline"),
-    new Error("offline"),
-    new Error("offline"),
-    new Error("offline"),
-  ]);
+  // 6 origins × 2 attempts each for network errors.
+  const offline = Array.from({ length: 12 }, () => new Error("offline"));
+  const result = await runScript(offline);
 
   assert.match(result.error.message, /网络请求失败/);
-  assert.equal(result.requests.length, 4);
+  assert.equal(result.requests.length, 12);
   assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
 }
 
@@ -200,13 +244,18 @@ async function testRetriesHttp429() {
 }
 
 async function testHttp403PromptsLoginWithoutRetry() {
+  // 403 is not retried; script probes all 6 origins once each.
   const result = await runScript([
+    response({ message: "forbidden" }, 403),
+    response({ message: "forbidden" }, 403),
+    response({ message: "forbidden" }, 403),
+    response({ message: "forbidden" }, 403),
     response({ message: "forbidden" }, 403),
     response({ message: "forbidden" }, 403),
   ]);
 
   assert.match(result.error.message, /需要登录/);
-  assert.equal(result.requests.length, 2);
+  assert.equal(result.requests.length, 6);
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 需要重新登录");
 }
@@ -296,8 +345,19 @@ async function testAdditionalRemoteNotificationChannels() {
 (async () => {
   assert.match(script, /@crontab\s+5-55\/5 \* once \* \*/);
   assert.doesNotMatch(script, /evil_gladoscookie|evil_galdosauthorization/);
+  assert.match(script, /^\/\/ @name\s+GLaDOS自动签到$/m);
   assert.match(script, /@connect\s+glados\.network/);
   assert.match(script, /@connect\s+glados\.rocks/);
+  assert.match(script, /@connect\s+glados\.one/);
+  assert.match(script, /@connect\s+glados\.space/);
+  assert.match(script, /@connect\s+glados\.cloud/);
+  assert.match(script, /@connect\s+glados\.vip/);
+  assert.doesNotMatch(script, /@connect\s+glados\.live/);
+  assert.doesNotMatch(script, /@connect\s+glados\.top/);
+  assert.match(
+    script,
+    /GLADOS_ORIGINS\s*=\s*\[\s*"https:\/\/glados\.network",\s*"https:\/\/glados\.rocks",\s*"https:\/\/glados\.one",\s*"https:\/\/glados\.space",\s*"https:\/\/glados\.cloud",\s*"https:\/\/glados\.vip",\s*\]/
+  );
   assert.match(script, /@connect\s+qyapi\.weixin\.qq\.com/);
   assert.match(script, /@connect\s+oapi\.dingtalk\.com/);
   assert.match(script, /@connect\s+open\.feishu\.cn/);
@@ -305,6 +365,7 @@ async function testAdditionalRemoteNotificationChannels() {
   assert.match(script, /@connect\s+api\.day\.app/);
   await testSuccessfulCheckin();
   await testFallsBackToRocksLogin();
+  await testFindsSessionOnAdditionalMainDomains();
   await testAlreadyCheckedIn();
   await testAlreadyCheckedInChineseMessage();
   await testCurrentAlreadyCheckedInResponse();
