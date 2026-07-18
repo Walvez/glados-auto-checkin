@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.1
+// @version      1.5.2
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -311,6 +311,16 @@ function registerNotificationMenus() {
   if (typeof GM_registerMenuCommand !== "function" || typeof GM_setValue !== "function") return;
 
   const ask = (message) => (typeof prompt === "function" ? prompt(message, "") : null);
+  GM_registerMenuCommand("立即手动签到", async () => {
+    try {
+      await run();
+    } catch (error) {
+      await handleRunError(error, false, true);
+    }
+  });
+  GM_registerMenuCommand("查看当前登录账号", async () => {
+    await notifyCurrentAccounts();
+  });
   GM_registerMenuCommand("配置 PushDeer 通知", async () => {
     const value = ask("输入 PushDeer PushKey；留空并确定可关闭该通知：");
     if (value !== null) await GM_setValue(NOTIFY_KEYS.pushdeer, value.trim());
@@ -398,6 +408,55 @@ function maskEmail(email) {
   const domain = text.slice(separator + 1);
   const maskedName = name.length <= 2 ? "***" : `${name.slice(0, 2)}***${name.slice(-1)}`;
   return `${maskedName}@${domain}`;
+}
+
+async function notifyCurrentAccounts() {
+  const accounts = [];
+  const failures = [];
+
+  for (const origin of GLADOS_ORIGINS) {
+    try {
+      const status = await requestWithRetry({
+        method: "GET",
+        url: `${origin}/api/user/status`,
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          Referer: `${origin}/console`,
+        },
+      });
+      if (status.code === 0 && status.data) {
+        accounts.push({
+          domain: new URL(origin).hostname,
+          account: maskEmail(status.data.email),
+        });
+      }
+    } catch (error) {
+      if (error.status !== 401 && error.status !== 403) {
+        failures.push(`${new URL(origin).hostname}：${error.message}`);
+      }
+      log(`${origin} 当前账号查询失败：${error.message}`, "warn");
+    }
+  }
+
+  const lines = accounts.map(({ domain, account }) => `${domain}：${account}`);
+  let title = "GLaDOS 当前登录账号";
+  let text;
+
+  if (accounts.length > 0) {
+    text = [`已发现 ${accounts.length} 个已登录域名`, ...lines].join("\n");
+    if (failures.length > 0) {
+      text += `\n另有 ${failures.length} 个域名查询失败`;
+    }
+  } else if (failures.length > 0) {
+    title = "GLaDOS 登录状态查询失败";
+    text = failures.join("\n");
+  } else {
+    title = "GLaDOS 未发现登录账号";
+    text = "6 个主站域名均未发现已登录账号，请先登录 GLaDOS。";
+  }
+
+  GM_notification({ title, text, timeout: accounts.length > 1 || failures.length > 0 ? 15000 : 10000 });
+  return { accounts, failures };
 }
 
 function isLoginError(result) {
@@ -653,20 +712,24 @@ async function run() {
   return summary;
 }
 
-registerNotificationMenus();
-
-return run().catch(async (error) => {
+async function handleRunError(error, rethrow, manual = false) {
   log(error.message || String(error), "error");
   const errorText = error.message || String(error);
   if (!error.alreadyNotified && !String(error.message || error).startsWith("需要登录：")) {
     GM_notification({
       title: "GLaDOS 签到失败",
-      text: `${errorText}\n脚本会在下一个候选时间自动再试。`,
+      text: `${errorText}\n${manual ? "请确认网络与登录状态后重试。" : "脚本会在下一个候选时间自动再试。"}`,
       timeout: 10000,
     });
   }
   if (!error.alreadyNotified) {
     await sendRemoteNotifications("GLaDOS 签到失败", errorText);
   }
-  throw error;
+  if (rethrow) throw error;
+}
+
+registerNotificationMenus();
+
+return run().catch(async (error) => {
+  await handleRunError(error, true);
 });

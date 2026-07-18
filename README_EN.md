@@ -12,7 +12,7 @@ Check in automatically every day and receive clear result notifications<br>
 Supports **ScriptCat · Surge · Quantumult X · GitHub Actions** and all 6 GLaDOS main-site domains: `glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](package.json)
 [![ScriptCat](https://img.shields.io/badge/ScriptCat-Install-ff6b35)](https://scriptcat.org/en/script-show-page/7014)
 [![Surge](https://img.shields.io/badge/Surge-Module-5b5bd6)](Surge/glados-auto-checkin.sgmodule)
 [![Quantumult X](https://img.shields.io/badge/Quantumult%20X-Snippet-111111)](QuantumultX/glados-auto-checkin.snippet)
@@ -56,6 +56,8 @@ The browser version is a background scheduled script for [ScriptCat](https://doc
 3. Sign in to any GLaDOS main site in the same browser, for example [glados.network](https://glados.network/). Also supported: `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, and `glados.vip` (not the defunct `glados.live` or the promo redirect `glados.top`).
 4. For multiple accounts, sign in to a different account on each main-site domain—for example, account A on `glados.network` and account B on `glados.rocks`.
 5. Make sure the script is enabled in ScriptCat. A manual first run is recommended.
+
+The first two script-menu commands are **Check in now** and **View signed-in accounts**. The first runs a complete check-in and uses the existing notification settings. The second shows each signed-in domain and masked email in a local browser notification only; it does not read or display cookie contents or send this status to remote notification channels.
 
 The script schedules candidate runs every five minutes from `00:05` through `23:55`. Each run scans all six domains, deduplicates sessions by email, and checks in every discovered account. ScriptCat's `once` mechanism skips later candidates only after all discovered accounts complete; partial network failures remain eligible for a later retry.
 
