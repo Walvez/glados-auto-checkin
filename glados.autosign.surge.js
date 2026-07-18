@@ -207,10 +207,9 @@ function isAlreadyCheckedIn(result) {
     .toLowerCase()
     .replace(/\s+/g, " ");
   const code = Number(result && result.code);
-  const points = Number(result && result.points);
 
   return (
-    (code === 1 && Number.isFinite(points) && points === 0) ||
+    code === 1 ||
     message.includes("please try tomorrow") ||
     message.includes("today's observation logged") ||
     message.includes("return tomorrow") ||
