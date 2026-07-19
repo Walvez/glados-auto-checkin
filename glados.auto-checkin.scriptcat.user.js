@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.3
+// @version      1.5.4
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -511,12 +511,34 @@ function isAlreadyCheckedIn(result) {
   );
 }
 
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function findCheckinRecord(result) {
+  const records = Array.isArray(result && result.list)
+    ? result.list.filter((record) => record && typeof record === "object")
+    : [];
+  const checkinRecords = records.filter((record) => record.business === "system:checkin");
+
+  if (checkinRecords.length > 0) {
+    return checkinRecords.find((record) => record.detail === localDateKey()) || checkinRecords[0];
+  }
+
+  // Older responses did not always include `business`. Keep that format
+  // compatible, but never mistake a typed exchange/collect record for check-in.
+  return records.some((record) => record.business) ? undefined : records[0];
+}
+
 function classifyCheckin(result) {
   if (!result || typeof result !== "object" || Array.isArray(result)) {
     throw new Error("GLaDOS 返回的签到数据无效");
   }
 
-  const record = result.list && result.list[0];
+  const record = findCheckinRecord(result);
 
   if (isLoginError(result)) {
     return { kind: "login_expired", message: result.message || "登录状态已失效" };

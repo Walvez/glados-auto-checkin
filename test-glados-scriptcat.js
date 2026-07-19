@@ -296,6 +296,57 @@ async function testCurrentAlreadyCheckedInResponse() {
   assert.doesNotMatch(result.notifications[0].text, /签到成功/);
 }
 
+async function testAlreadyCheckedInIgnoresNewerExchangeRecord() {
+  const result = await runScript([
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 426 } }),
+    }),
+    response({
+      code: 1,
+      points: 0,
+      message: "Today's observation logged. Return tomorrow for more points.",
+      list: [
+        {
+          business: "system:ex:plan500:2026-07-19",
+          change: "-500.00000000",
+          balance: "12.0000000000000000",
+          detail: "exchange 500 points for 100 days",
+        },
+        {
+          business: "system:checkin",
+          change: "9.00000000",
+          balance: "512.0000000000000000",
+          detail: "2026-07-19",
+        },
+      ],
+    }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +9; 512积分, 426天.");
+  assert.doesNotMatch(result.notifications[0].text, /-500/);
+}
+
+async function testAlreadyCheckedInDoesNotUseExchangeOnlyRecord() {
+  const result = await runScript([
+    ...statusScan({
+      network: response({ code: 0, data: { email: "user@example.com", leftDays: 426 } }),
+    }),
+    response({
+      code: 1,
+      message: "Today's observation logged. Return tomorrow for more points.",
+      list: [{
+        business: "system:ex:plan500:2026-07-19",
+        change: "-500.00000000",
+        balance: "12.0000000000000000",
+      }],
+    }),
+  ]);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; ?积分, 426天.");
+}
+
 async function testNeedsLogin() {
   // Six main-site domains, each reports not logged in (no retry on 200).
   const result = await runScript([
@@ -516,6 +567,8 @@ async function testAdditionalRemoteNotificationChannels() {
   await testAlreadyCheckedInChineseMessage();
   await testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn();
   await testCurrentAlreadyCheckedInResponse();
+  await testAlreadyCheckedInIgnoresNewerExchangeRecord();
+  await testAlreadyCheckedInDoesNotUseExchangeOnlyRecord();
   await testNeedsLogin();
   await testNetworkFailureNotifies();
   await testUnknownCheckinResponseFailsClosed();
