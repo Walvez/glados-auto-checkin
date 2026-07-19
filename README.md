@@ -12,7 +12,7 @@
 支持 **ScriptCat · Surge · Quantumult X · GitHub Actions**，兼容 6 个 GLaDOS 主站域名：`glados.network`、`glados.rocks`、`glados.one`、`glados.space`、`glados.cloud`、`glados.vip`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.5-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.5.6-blue.svg)](package.json)
 [![ScriptCat](https://img.shields.io/badge/ScriptCat-安装脚本-ff6b35)](https://scriptcat.org/zh-CN/script-show-page/7014)
 [![Surge](https://img.shields.io/badge/Surge-Module-5b5bd6)](Surge/glados-auto-checkin.sgmodule)
 [![Quantumult X](https://img.shields.io/badge/Quantumult%20X-Snippet-111111)](QuantumultX/glados-auto-checkin.snippet)
