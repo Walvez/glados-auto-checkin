@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.6
+// @version      1.5.7
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -365,7 +365,7 @@ function registerNotificationMenus() {
     const text = result.configured === 0
       ? "尚未配置远程通知渠道。"
       : `已发送 ${result.configured} 个渠道：成功 ${result.succeeded} 个，失败 ${result.failed} 个。`;
-    GM_notification({ title: "GLaDOS 通知测试", text, timeout: 10000 });
+    GM_notification({ title: "GLaDOS 通知测试", text });
   });
 }
 
@@ -466,7 +466,7 @@ async function notifyCurrentAccounts() {
     text = "6 个主站域名均未发现已登录账号，请先登录 GLaDOS。";
   }
 
-  GM_notification({ title, text, timeout: accounts.length > 1 || failures.length > 0 ? 15000 : 10000 });
+  GM_notification({ title, text });
   return { accounts, failures };
 }
 
@@ -487,7 +487,6 @@ function notifyLogin(message) {
   GM_notification({
     title: "GLaDOS 需要重新登录",
     text: `${message}\n点击通知打开登录页。`,
-    timeout: 15000,
     onclick: () => GM_openInTab(LOGIN_URL, true),
   });
 }
@@ -712,7 +711,6 @@ async function run() {
     GM_notification({
       title: "GLaDOS 签到结果",
       text,
-      timeout: 10000,
     });
     await sendRemoteNotifications(`GLaDOS · ${result.account}`, text);
     return `${result.account}：${result.message}`;
@@ -737,7 +735,6 @@ async function run() {
   GM_notification({
     title,
     text: summary,
-    timeout: issueCount > 0 ? 15000 : 10000,
     onclick: failures.some(({ error }) => String(error.message).startsWith("需要登录："))
       ? () => GM_openInTab(LOGIN_URL, true)
       : undefined,
@@ -764,7 +761,6 @@ async function handleRunError(error, rethrow, manual = false) {
     GM_notification({
       title: "GLaDOS 签到失败",
       text: `${errorText}\n${manual ? "请确认网络与登录状态后重试。" : "脚本会在下一个候选时间自动再试。"}`,
-      timeout: 10000,
     });
   }
   if (!error.alreadyNotified) {

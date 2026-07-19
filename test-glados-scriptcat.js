@@ -6,6 +6,12 @@ const vm = require("vm");
 const scriptPath = path.join(__dirname, "glados.auto-checkin.scriptcat.user.js");
 const script = fs.readFileSync(scriptPath, "utf8");
 
+assert.deepEqual(
+  [...script.matchAll(/\btimeout\s*:\s*([^,\n}]+)/g)].map((match) => match[1].trim()),
+  ["REQUEST_TIMEOUT", "REQUEST_TIMEOUT"],
+  "只有网络请求应设置 timeout，本机通知必须常驻"
+);
+
 function response(body, status = 200) {
   return { status, response: body, responseText: JSON.stringify(body) };
 }
