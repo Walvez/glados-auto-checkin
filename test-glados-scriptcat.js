@@ -538,6 +538,9 @@ async function testAdditionalRemoteNotificationChannels() {
   assert.match(script, /@crontab\s+5-55\/5 \* once \* \*/);
   assert.doesNotMatch(script, /evil_gladoscookie|evil_galdosauthorization/);
   assert.match(script, /^\/\/ @name\s+GLaDOS自动签到$/m);
+  assert.match(script, /^\/\/ @source\s+https:\/\/scriptcat\.org\/zh-CN\/script-show-page\/7014$/m);
+  assert.match(script, /^\/\/ @homepageURL\s+https:\/\/github\.com\/Walvez\/glados-auto-checkin$/m);
+  assert.match(script, /^\/\/ @supportURL\s+https:\/\/github\.com\/Walvez\/glados-auto-checkin\/issues$/m);
   assert.match(script, /@connect\s+glados\.network/);
   assert.match(script, /@connect\s+glados\.rocks/);
   assert.match(script, /@connect\s+glados\.one/);

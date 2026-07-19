@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.4
+// @version      1.5.5
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -32,6 +32,7 @@
 // @tag          自动签到
 // @tag          定时脚本
 // @tag          后台脚本
+// @source       https://scriptcat.org/zh-CN/script-show-page/7014
 // @homepageURL  https://github.com/Walvez/glados-auto-checkin
 // @supportURL   https://github.com/Walvez/glados-auto-checkin/issues
 // ==/UserScript==
