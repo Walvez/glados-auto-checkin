@@ -66,6 +66,8 @@
 
 欢迎访问 [Walvez/glados-auto-checkin](https://github.com/Walvez/glados-auto-checkin) 查看完整源码、详细文档与版本更新。
 
+本仓库除本脚本外，还提供 Surge 模块、Quantumult X 配置和 GitHub Actions 等多种签到方式，可按使用环境选择：
+
 | 方式 | 使用方式 | 优势或不同点 | 建议使用场景 |
 | :--- | :--- | :--- | :--- |
 | **本脚本（ScriptCat）** | 使用浏览器中各主站的独立登录状态，后台逐账号签到 | 无需复制 Cookie；支持不同域名中的多个账号；同账号自动去重 | 有多账号需求，日常使用 Chrome / Edge |
