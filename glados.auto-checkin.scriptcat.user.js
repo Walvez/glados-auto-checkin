@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.7
+// @version      1.5.8
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -19,6 +19,7 @@
 // @connect      glados.space
 // @connect      glados.cloud
 // @connect      glados.vip
+// @connect      glados-facility.com
 // @connect      api2.pushdeer.com
 // @connect      sctapi.ftqq.com
 // @connect      api.telegram.org
@@ -43,6 +44,7 @@ const GLADOS_ORIGINS = [
   "https://glados.space",
   "https://glados.cloud",
   "https://glados.vip",
+  "https://glados-facility.com",
 ];
 const LOGIN_URL = "https://glados.network/login";
 const REQUEST_TIMEOUT = 15000;

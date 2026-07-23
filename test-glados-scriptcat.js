@@ -16,7 +16,19 @@ function response(body, status = 200) {
   return { status, response: body, responseText: JSON.stringify(body) };
 }
 
-const DOMAIN_ORDER = ["network", "rocks", "one", "space", "cloud", "vip"];
+const DOMAIN_ORDER = ["network", "rocks", "one", "space", "cloud", "vip", "facility"];
+const ORIGIN_COUNT = DOMAIN_ORDER.length;
+
+function originFor(domain) {
+  if (domain === "facility") {
+    return "https://glados-facility.com";
+  }
+  return `https://glados.${domain}`;
+}
+
+function tokenFor(domain) {
+  return originFor(domain).slice("https://".length);
+}
 
 function statusScan(loggedIn = {}) {
   return DOMAIN_ORDER.map((domain) =>
@@ -76,13 +88,13 @@ async function testSuccessfulCheckin() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 7);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 1);
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
   assert.equal(result.requests[0].headers.Referer, "https://glados.network/console");
-  assert.equal(result.requests[6].url, "https://glados.network/api/user/checkin");
-  assert.equal(result.requests[6].headers.Referer, "https://glados.network/console/checkin");
-  assert.equal(result.requests[6].anonymous, false);
-  assert.equal(JSON.parse(result.requests[6].data).token, "glados.network");
+  assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.network/api/user/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT].headers.Referer, "https://glados.network/console/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT].anonymous, false);
+  assert.equal(JSON.parse(result.requests[ORIGIN_COUNT].data).token, "glados.network");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 签到结果");
   assert.equal(result.notifications[0].text, ".network: us**r@example.com, ✅, +10; 128.5积分, 441天.");
@@ -105,7 +117,7 @@ async function testManualCheckinMenuRunsAgainAndNotifies() {
     "查看当前登录账号",
   ]);
   await result.menuCommands[0].callback();
-  assert.equal(result.requests.length, 14);
+  assert.equal(result.requests.length, (ORIGIN_COUNT + 1) * 2);
   assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 2);
   assert.equal(result.notifications.length, 2);
   assert.equal(result.notifications[1].text, ".network: ma**l@example.com, 已签, +?; ?积分, 60天.");
@@ -125,7 +137,7 @@ async function testCurrentAccountMenuShowsEachDomainWithMaskedEmail() {
 
   assert.equal(result.error, undefined);
   await result.menuCommands[1].callback();
-  assert.equal(result.requests.length, 13);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 1 + ORIGIN_COUNT);
   assert.equal(result.notifications.length, 2);
   assert.equal(result.notifications[1].title, "GLaDOS 当前登录账号");
   assert.match(result.notifications[1].text, /glados\.network：fi\*\*\*t@example\.com/);
@@ -142,23 +154,23 @@ async function testFallsBackToRocksLogin() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 7);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 1);
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
   assert.equal(result.requests[1].url, "https://glados.rocks/api/user/status");
-  assert.equal(result.requests[6].url, "https://glados.rocks/api/user/checkin");
-  assert.equal(result.requests[6].headers.Origin, "https://glados.rocks");
+  assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT].headers.Origin, "https://glados.rocks");
   assert.equal(result.requests[1].headers.Referer, "https://glados.rocks/console");
-  assert.equal(result.requests[6].headers.Referer, "https://glados.rocks/console/checkin");
-  assert.equal(JSON.parse(result.requests[6].data).token, "glados.rocks");
+  assert.equal(result.requests[ORIGIN_COUNT].headers.Referer, "https://glados.rocks/console/checkin");
+  assert.equal(JSON.parse(result.requests[ORIGIN_COUNT].data).token, "glados.rocks");
   assert.equal(result.notifications[0].title, "GLaDOS 签到结果");
   assert.equal(result.notifications[0].text, ".rocks: ro**s@example.com, ✅, +9; 99积分, 88天.");
 }
 
 async function testFindsSessionOnAdditionalMainDomains() {
-  const domains = ["one", "space", "cloud", "vip"];
+  const domains = ["one", "space", "cloud", "vip", "facility"];
 
   for (const domain of domains) {
-    const origin = `https://glados.${domain}`;
+    const origin = originFor(domain);
     const result = await runScript([
       ...statusScan({
         [domain]: response({ code: 0, data: { email: `${domain}@example.com`, leftDays: 50 } }),
@@ -168,13 +180,13 @@ async function testFindsSessionOnAdditionalMainDomains() {
 
     assert.equal(result.error, undefined, `domain ${domain} should succeed`);
     const statusRequest = result.requests.find((item) => item.url === `${origin}/api/user/status`);
-    const checkinRequest = result.requests[6];
+    const checkinRequest = result.requests[ORIGIN_COUNT];
     assert.equal(statusRequest.url, `${origin}/api/user/status`);
     assert.equal(statusRequest.headers.Referer, `${origin}/console`);
     assert.equal(checkinRequest.url, `${origin}/api/user/checkin`);
     assert.equal(checkinRequest.headers.Origin, origin);
     assert.equal(checkinRequest.headers.Referer, `${origin}/console/checkin`);
-    assert.equal(JSON.parse(checkinRequest.data).token, `glados.${domain}`);
+    assert.equal(JSON.parse(checkinRequest.data).token, tokenFor(domain));
   }
 }
 
@@ -189,11 +201,11 @@ async function testChecksInDifferentAccountsAcrossDomains() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 8);
-  assert.equal(result.requests[6].url, "https://glados.network/api/user/checkin");
-  assert.equal(result.requests[7].url, "https://glados.rocks/api/user/checkin");
-  assert.equal(JSON.parse(result.requests[6].data).token, "glados.network");
-  assert.equal(JSON.parse(result.requests[7].data).token, "glados.rocks");
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
+  assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.network/api/user/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT + 1].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(JSON.parse(result.requests[ORIGIN_COUNT].data).token, "glados.network");
+  assert.equal(JSON.parse(result.requests[ORIGIN_COUNT + 1].data).token, "glados.rocks");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 多账号签到完成");
   assert.equal(
@@ -213,9 +225,9 @@ async function testDeduplicatesSameAccountAcrossDomains() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 7);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 1);
   assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 1);
-  assert.equal(result.requests[6].url, "https://glados.network/api/user/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.network/api/user/checkin");
   assert.match(result.logs.map((item) => item.message).join("\n"), /同一账号/);
 }
 
@@ -354,28 +366,16 @@ async function testAlreadyCheckedInDoesNotUseExchangeOnlyRecord() {
 }
 
 async function testNeedsLogin() {
-  // Six main-site domains, each reports not logged in (no retry on 200).
-  const result = await runScript([
-    response({ code: -2, message: "Not logged in" }),
-    response({ code: -2, message: "Not logged in" }),
-    response({ code: -2, message: "Not logged in" }),
-    response({ code: -2, message: "Not logged in" }),
-    response({ code: -2, message: "Not logged in" }),
-    response({ code: -2, message: "Not logged in" }),
-  ]);
+  // All main-site domains report not logged in (no retry on 200).
+  const result = await runScript(
+    Array.from({ length: ORIGIN_COUNT }, () => response({ code: -2, message: "Not logged in" }))
+  );
 
   assert.match(result.error.message, /需要登录/);
-  assert.equal(result.requests.length, 6);
+  assert.equal(result.requests.length, ORIGIN_COUNT);
   assert.deepEqual(
     result.requests.map((item) => item.url),
-    [
-      "https://glados.network/api/user/status",
-      "https://glados.rocks/api/user/status",
-      "https://glados.one/api/user/status",
-      "https://glados.space/api/user/status",
-      "https://glados.cloud/api/user/status",
-      "https://glados.vip/api/user/status",
-    ]
+    DOMAIN_ORDER.map((domain) => `${originFor(domain)}/api/user/status`)
   );
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 需要重新登录");
@@ -384,12 +384,12 @@ async function testNeedsLogin() {
 }
 
 async function testNetworkFailureNotifies() {
-  // 6 origins × 2 attempts each for network errors.
-  const offline = Array.from({ length: 12 }, () => new Error("offline"));
+  // Each origin × 2 attempts for network errors.
+  const offline = Array.from({ length: ORIGIN_COUNT * 2 }, () => new Error("offline"));
   const result = await runScript(offline);
 
   assert.match(result.error.message, /网络请求失败/);
-  assert.equal(result.requests.length, 12);
+  assert.equal(result.requests.length, ORIGIN_COUNT * 2);
   assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
 }
 
@@ -418,7 +418,7 @@ async function testInvalidJsonFailsClosed() {
   ]);
 
   assert.match(result.error.message, /无法解析/);
-  assert.equal(result.requests.length, 8);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
   assert.equal(result.notifications[0].title, "GLaDOS 签到失败");
 }
 
@@ -432,23 +432,18 @@ async function testRetriesHttp429() {
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 8);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
   assert.match(result.notifications[0].text, /✅/);
 }
 
 async function testHttp403PromptsLoginWithoutRetry() {
-  // 403 is not retried; script probes all 6 origins once each.
-  const result = await runScript([
-    response({ message: "forbidden" }, 403),
-    response({ message: "forbidden" }, 403),
-    response({ message: "forbidden" }, 403),
-    response({ message: "forbidden" }, 403),
-    response({ message: "forbidden" }, 403),
-    response({ message: "forbidden" }, 403),
-  ]);
+  // 403 is not retried; script probes all origins once each.
+  const result = await runScript(
+    Array.from({ length: ORIGIN_COUNT }, () => response({ message: "forbidden" }, 403))
+  );
 
   assert.match(result.error.message, /需要登录/);
-  assert.equal(result.requests.length, 6);
+  assert.equal(result.requests.length, ORIGIN_COUNT);
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 需要重新登录");
 }
@@ -481,12 +476,13 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
   );
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 8);
-  assert.equal(result.requests[7].url, "https://api2.pushdeer.com/message/push");
-  assert.equal(result.requests[7].anonymous, true);
-  assert.equal(result.requests[7].headers.Cookie, undefined);
-  assert.doesNotMatch(result.requests[7].data, /user@example\.com/);
-  assert.match(result.requests[7].data, /us\*\*r@example\.com/);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
+  const remote = result.requests[ORIGIN_COUNT + 1];
+  assert.equal(remote.url, "https://api2.pushdeer.com/message/push");
+  assert.equal(remote.anonymous, true);
+  assert.equal(remote.headers.Cookie, undefined);
+  assert.doesNotMatch(remote.data, /user@example\.com/);
+  assert.match(remote.data, /us\*\*r@example\.com/);
 }
 
 async function testAdditionalRemoteNotificationChannels() {
@@ -515,8 +511,8 @@ async function testAdditionalRemoteNotificationChannels() {
   );
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, 12);
-  const remote = result.requests.slice(7);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 6);
+  const remote = result.requests.slice(ORIGIN_COUNT + 1);
   assert.deepEqual(
     remote.map((item) => item.url),
     [
@@ -553,11 +549,12 @@ async function testAdditionalRemoteNotificationChannels() {
   assert.match(script, /@connect\s+glados\.space/);
   assert.match(script, /@connect\s+glados\.cloud/);
   assert.match(script, /@connect\s+glados\.vip/);
+  assert.match(script, /@connect\s+glados-facility\.com/);
   assert.doesNotMatch(script, /@connect\s+glados\.live/);
   assert.doesNotMatch(script, /@connect\s+glados\.top/);
   assert.match(
     script,
-    /GLADOS_ORIGINS\s*=\s*\[\s*"https:\/\/glados\.network",\s*"https:\/\/glados\.rocks",\s*"https:\/\/glados\.one",\s*"https:\/\/glados\.space",\s*"https:\/\/glados\.cloud",\s*"https:\/\/glados\.vip",\s*\]/
+    /GLADOS_ORIGINS\s*=\s*\[\s*"https:\/\/glados\.network",\s*"https:\/\/glados\.rocks",\s*"https:\/\/glados\.one",\s*"https:\/\/glados\.space",\s*"https:\/\/glados\.cloud",\s*"https:\/\/glados\.vip",\s*"https:\/\/glados-facility\.com",\s*\]/
   );
   assert.match(script, /@connect\s+qyapi\.weixin\.qq\.com/);
   assert.match(script, /@connect\s+oapi\.dingtalk\.com/);
