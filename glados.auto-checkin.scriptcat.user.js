@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.8
+// @version      1.5.9
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -465,7 +465,7 @@ async function notifyCurrentAccounts() {
     text = failures.join("\n");
   } else {
     title = "GLaDOS 未发现登录账号";
-    text = "6 个主站域名均未发现已登录账号，请先登录 GLaDOS。";
+    text = "全部主站域名均未发现已登录账号，请先登录 GLaDOS。";
   }
 
   GM_notification({ title, text });

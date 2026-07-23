@@ -5,8 +5,19 @@ const vm = require("vm");
 
 const scriptPath = path.join(__dirname, "glados.autosign.surge.js");
 
-const SUPPORTED_HOSTS = ["network", "rocks", "one", "space", "cloud", "vip"];
-const SUPPORTED_ORIGINS = SUPPORTED_HOSTS.map((host) => `https://glados.${host}`);
+const SUPPORTED_HOSTNAMES = [
+  "glados.network",
+  "glados.rocks",
+  "glados.one",
+  "glados.space",
+  "glados.cloud",
+  "glados.vip",
+  "glados-facility.com",
+];
+const SUPPORTED_ORIGINS = SUPPORTED_HOSTNAMES.map((host) => `https://${host}`);
+const ORIGIN_PATTERN = "(?:glados\\.(?:network|rocks|one|space|cloud|vip)|glados-facility\\.com)";
+// Legacy alias: short suffixes for tests that still use glados.<suffix> hosts.
+const SUPPORTED_HOSTS = ["network", "rocks", "one", "space", "cloud", "vip", "facility"];
 const DOMAIN_ALT = "network|rocks|one|space|cloud|vip";
 
 function testStableResourceReferencesAndNotificationBoundary() {
@@ -61,16 +72,16 @@ function testConfigFilesCoverAllMainDomains() {
   );
   const proxyScript = fs.readFileSync(scriptPath, "utf8");
 
-  const hostList = SUPPORTED_HOSTS.map((host) => `glados.${host}`).join(", ");
+  const hostList = SUPPORTED_HOSTNAMES.join(", ");
   assert.match(module, new RegExp(`hostname = %APPEND% ${hostList.replace(/\./g, "\\.")}`));
-  assert.match(module, new RegExp(`glados\\\\.\\(${DOMAIN_ALT}\\)`));
+  assert.match(module, new RegExp(ORIGIN_PATTERN));
   assert.match(snippet, new RegExp(`^hostname = ${hostList.replace(/\./g, "\\.")}$`, "m"));
-  assert.match(snippet, new RegExp(`glados\\\\.\\(${DOMAIN_ALT}\\)`));
+  assert.match(snippet, new RegExp(ORIGIN_PATTERN));
 
   SUPPORTED_ORIGINS.forEach((origin) => {
     assert.match(proxyScript, new RegExp(origin.replace(/\./g, "\\.")));
   });
-  assert.match(proxyScript, new RegExp(`glados\\\\.\\(${DOMAIN_ALT}\\)`));
+  assert.match(proxyScript, new RegExp(ORIGIN_PATTERN));
   assert.doesNotMatch(module, /glados\.live|glados\.top/);
   assert.doesNotMatch(snippet, /glados\.live|glados\.top/);
   assert.doesNotMatch(proxyScript, /glados\.live|glados\.top/);
@@ -145,27 +156,33 @@ async function testCaptureNetworkDomain() {
 }
 
 async function testCaptureAllSupportedMainDomains() {
-  for (const host of SUPPORTED_HOSTS) {
-    const origin = `https://glados.${host}`;
+  for (const hostname of SUPPORTED_HOSTNAMES) {
+    const origin = `https://${hostname}`;
     const result = await runScript({
       store: {},
       $request: {
         method: "GET",
         url: `${origin}/console/checkin`,
-        headers: { Cookie: `session=${host}` },
+        headers: { Cookie: `session=${hostname}` },
       },
     });
 
-    assert.equal(result.store.evil_gladoscookie, `session=${host}`);
+    assert.equal(result.store.evil_gladoscookie, `session=${hostname}`);
     assert.equal(result.store.evil_gladosorigin, origin);
   }
 }
 
 async function testCronSigninUsesCapturedAdditionalOrigins() {
-  const extraHosts = ["one", "space", "cloud", "vip"];
+  const extraOrigins = [
+    "https://glados.one",
+    "https://glados.space",
+    "https://glados.cloud",
+    "https://glados.vip",
+    "https://glados-facility.com",
+  ];
 
-  for (const host of extraHosts) {
-    const origin = `https://glados.${host}`;
+  for (const origin of extraOrigins) {
+    const host = new URL(origin).hostname;
     let postOptions;
     let getOptions;
     const result = await runScript({
@@ -196,7 +213,7 @@ async function testCronSigninUsesCapturedAdditionalOrigins() {
     assert.equal(result.doneValue.status, "ok", `origin ${origin} should check in`);
     assert.equal(postOptions.url, `${origin}/api/user/checkin`);
     assert.equal(postOptions.headers.Origin, origin);
-    assert.equal(JSON.parse(postOptions.body).token, `glados.${host}`);
+    assert.equal(JSON.parse(postOptions.body).token, host);
     assert.equal(getOptions.url, `${origin}/api/user/status`);
   }
 }
@@ -251,8 +268,8 @@ async function testMissingCredentialsMentionsAllMainDomains() {
   });
 
   assert.equal(result.doneValue.status, "needs_cookie");
-  SUPPORTED_HOSTS.forEach((host) => {
-    assert.match(result.notifications[0].body, new RegExp(`glados\\.${host}`));
+  SUPPORTED_HOSTNAMES.forEach((hostname) => {
+    assert.match(result.notifications[0].body, new RegExp(hostname.replace(/\./g, "\\.")));
   });
 }
 

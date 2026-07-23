@@ -2,7 +2,7 @@
 
 ## ✨ 功能亮点
 
-- 自动兼容 6 个 GLaDOS 主站域名：`glados.network`、`glados.rocks`、`glados.one`、`glados.space`、`glados.cloud`、`glados.vip`
+- 自动兼容 7 个 GLaDOS 主站域名：`glados.network`、`glados.rocks`、`glados.one`、`glados.space`、`glados.cloud`、`glados.vip`、`glados-facility.com`
 - 支持在不同主站域名登录不同账号，并逐个在原域名完成签到
 - 同一账号在多个域名登录时按邮箱自动去重，避免重复签到
 - 准确区分签到成功、今日已签到、登录失效和接口异常
@@ -54,11 +54,11 @@
 
 - 不会显式读取、保存或上传 GLaDOS Cookie
 - 远程通知不包含 Cookie、Authorization 或完整邮箱
-- 仅向上述 6 个 GLaDOS 主站域名和用户主动配置的通知平台发送请求
+- 仅向上述 7 个 GLaDOS 主站域名和用户主动配置的通知平台发送请求
 
 ## ⏰ 定时规则
 
-脚本每天设置多个候选运行时间。每次会扫描全部 6 个主站、按账号去重后逐个签到；全部已发现账号完成后，ScriptCat 的 `once` 机制会自动跳过其余候选任务。部分账号或域名发生网络异常时，会在下一个候选时间重试。
+脚本每天设置多个候选运行时间。每次会扫描全部 7 个主站、按账号去重后逐个签到；全部已发现账号完成后，ScriptCat 的 `once` 机制会自动跳过其余候选任务。部分账号或域名发生网络异常时，会在下一个候选时间重试。
 
 本脚本不保存账号 Cookie。退出某个域名或让其登录状态失效后，该域名中的账号便不会再被发现和签到。
 

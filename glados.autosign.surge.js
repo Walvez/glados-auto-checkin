@@ -10,8 +10,10 @@ const SUPPORTED_ORIGINS = [
   "https://glados.space",
   "https://glados.cloud",
   "https://glados.vip",
+  "https://glados-facility.com",
 ];
-const ORIGIN_HOST_RE = /^https:\/\/glados\.(network|rocks|one|space|cloud|vip)(?:\/|$)/i;
+const ORIGIN_HOST_RE =
+  /^https:\/\/(glados\.(?:network|rocks|one|space|cloud|vip)|glados-facility\.com)(?:\/|$)/i;
 const SCRIPT_VERSION = "reliability-20260718-dynamic-token";
 const MAX_REQUEST_ATTEMPTS = 2;
 const RETRY_DELAY = 1500;
@@ -143,7 +145,7 @@ function maskEmail(email) {
 
 function originFromUrl(url) {
   const match = ORIGIN_HOST_RE.exec(url || "");
-  return match ? `https://glados.${match[1].toLowerCase()}` : "";
+  return match ? `https://${match[1].toLowerCase()}` : "";
 }
 
 function storedOrigin() {
@@ -330,7 +332,7 @@ function checkin() {
   if (!cookie && !authorization) {
     return finishWithNotification(
       "",
-      "请先登录 glados.network / glados.rocks / glados.one / glados.space / glados.cloud / glados.vip 并刷新一次页面，让代理工具获取登录凭据",
+      "请先登录 glados.network / glados.rocks / glados.one / glados.space / glados.cloud / glados.vip / glados-facility.com 并刷新一次页面，让代理工具获取登录凭据",
       { status: "needs_cookie", version: SCRIPT_VERSION }
     );
   }
