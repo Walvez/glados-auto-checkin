@@ -380,8 +380,10 @@ Tests cover ScriptCat cross-domain multi-account discovery, same-account dedupli
 .
 ├── glados.auto-checkin.scriptcat.user.js  # ScriptCat browser script
 ├── glados.autosign.surge.js               # Shared Surge / Quantumult X script
-├── lib/glados-core.js                     # Shared validation and credential parsing
+├── lib/glados-core.js                     # Shared validation/credential parsing (CLI/Actions only)
 ├── cli/checkin.js                         # Node.js CLI / Actions entry
+├── SCRIPT_CAT.md                          # ScriptCat listing notes
+├── AGENTS.md                              # Agent maintenance entry (not end-user install docs)
 ├── .github/workflows/
 │   ├── checkin.yml                        # Scheduled + manual check-in
 │   └── test.yml                           # Push / PR tests

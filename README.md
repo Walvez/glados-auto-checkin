@@ -382,8 +382,10 @@ npm test
 .
 ├── glados.auto-checkin.scriptcat.user.js  # ScriptCat 浏览器脚本
 ├── glados.autosign.surge.js               # Surge / Quantumult X 共用脚本
-├── lib/glados-core.js                     # 共享签到校验与凭据解析
+├── lib/glados-core.js                     # 共享签到校验与凭据解析（仅 CLI/Actions）
 ├── cli/checkin.js                         # Node.js CLI / Actions 入口
+├── SCRIPT_CAT.md                          # ScriptCat 发布页说明
+├── AGENTS.md                              # Agent 维护入口（非用户安装文档）
 ├── .github/workflows/
 │   ├── checkin.yml                        # 定时 + 手动签到
 │   └── test.yml                           # 推送 / PR 测试
