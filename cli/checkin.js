@@ -172,6 +172,29 @@ async function findLoggedInSession(account, request, origins) {
 }
 
 /**
+ * Fetch the live spendable balance from /api/user/points.
+ * Returns a formatted string, or undefined when unavailable/failed.
+ * Never throws — the check-in outcome must not depend on this request.
+ */
+async function fetchLiveBalance(origin, account, request, logger) {
+  try {
+    const pointsResponse = await request("GET", `${origin}/api/user/points`, {
+      headers: buildStatusHeaders(origin, account.cookie, account.authorization),
+    });
+    const pointsJson = pointsResponse.json;
+    if (pointsJson && pointsJson.code === 0 && pointsJson.points !== undefined) {
+      return pointsJson.points;
+    }
+    return undefined;
+  } catch (error) {
+    logger.info(
+      `[${account.name}] 实时积分查询失败（沿用签到记录余额）：${error.message || String(error)}`
+    );
+    return undefined;
+  }
+}
+
+/**
  * Check in one account. Successful or already-checked outcomes are not repeated
  * within the same account object (`account._done`).
  */
@@ -210,6 +233,16 @@ async function checkinAccount(account, request, origins, logger, secrets) {
 
   if (classified.kind === "login_expired") {
     throw createHttpError(`${classified.message}，请更新 GitHub Secret 中的 Cookie`, 401);
+  }
+
+  // 实时可用积分优先于签到记录快照（兑换发生在签到之后时，快照会过期）。
+  const liveBalance = await fetchLiveBalance(origin, account, request, logger);
+  if (liveBalance !== undefined) {
+    try {
+      classified = classifyCheckin(checkinResponse.json, liveBalance);
+    } catch (error) {
+      // 保留实时积分查询前的分类结果。
+    }
   }
 
   const remainingText = remainingDays != null ? `\n剩余${remainingDays}天` : "";

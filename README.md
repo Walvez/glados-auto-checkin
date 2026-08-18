@@ -12,7 +12,7 @@
 支持 **ScriptCat · Surge · Quantumult X · GitHub Actions**，兼容 7 个 GLaDOS 主站域名：`glados.network`、`glados.rocks`、`glados.one`、`glados.space`、`glados.cloud`、`glados.vip`、`glados-facility.com`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.9-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](package.json)
 [![ScriptCat](https://img.shields.io/badge/ScriptCat-安装脚本-ff6b35)](https://scriptcat.org/zh-CN/script-show-page/7014)
 [![Surge](https://img.shields.io/badge/Surge-Module-5b5bd6)](Surge/glados-auto-checkin.sgmodule)
 [![Quantumult X](https://img.shields.io/badge/Quantumult%20X-Snippet-111111)](QuantumultX/glados-auto-checkin.snippet)
@@ -248,6 +248,8 @@ Actions **不内置第三方推送**（避免额外密钥与数据外传）。�
 | `.network: 14**5@qq.com, ✅, +7; 316积分, 411天.` | `.rocks: qq**5@gmail.com, 已签, +10; 271积分, 426天.` |
 
 `✅` 表示本次首次签到成功，“已签”表示当天已经签到。多账号时每个域名占一行，不再附加冗长的汇总句。
+
+通知中的积分始终为**签到后重新读取的实时可用余额**（`/api/user/points`），而不是签到流水里的历史快照；因此当天兑换过积分时，通知显示的是兑换后的余额。实时积分接口暂不可用时，会回退显示签到记录里的余额。
 
 ScriptCat 默认使用浏览器通知，也可以按需配置 PushDeer、Server酱、Telegram、企业微信、钉钉、飞书、PushMe 或 Bark。Surge 与 Quantumult X 仅使用应用自带通知。
 

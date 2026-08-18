@@ -492,6 +492,7 @@ async function testQuantumultXCronSignin() {
   const requests = [];
   const responses = [
     { body: JSON.stringify({ list: [{ change: "7.5", balance: "135.5" }] }) },
+    { body: JSON.stringify({ code: 0, points: "200.0000000000000000" }) },
     { body: JSON.stringify({ code: 0, data: { email: "qx@example.com", leftDays: 441 } }) },
   ];
   const result = await runScript({
@@ -516,9 +517,10 @@ async function testQuantumultXCronSignin() {
 
   assert.equal(result.doneValue.status, "ok");
   assert.equal(requests[0].url, "https://glados.network/api/user/checkin");
-  assert.equal(requests[1].url, "https://glados.network/api/user/status");
+  assert.equal(requests[1].url, "https://glados.network/api/user/points");
+  assert.equal(requests[2].url, "https://glados.network/api/user/status");
   assert.equal(notifications[0].subtitle, "账户：***@example.com");
-  assert.match(notifications[0].body, /今日签到获得7\.5积分，共135\.5积分/);
+  assert.match(notifications[0].body, /今日签到获得7\.5积分，共200积分/);
   assert.match(notifications[0].body, /剩余441天/);
 }
 
@@ -609,14 +611,19 @@ async function testStatusFailureIsPartialSuccess() {
         { status: 200 },
         JSON.stringify({ list: [{ change: 3, balance: 30 }] })
       ),
-      get: (_options, callback) => {
+      get: (options, callback) => {
         getCount += 1;
+        if (options.url.endsWith("/api/user/points")) {
+          // 实时积分查询失败：沿用签到记录余额，不影响签到结果。
+          return callback(null, { status: 500 }, "server error");
+        }
         callback(null, { status: 500 }, "server error");
       },
     },
   });
 
-  assert.equal(getCount, 2);
+  // points 查询 1 次 + status 查询重试 2 次
+  assert.equal(getCount, 3);
   assert.equal(result.doneValue.status, "partial_success");
   assert.match(result.notifications[0].body, /不影响本次签到/);
   assert.ok(store.glados_last_success_date);

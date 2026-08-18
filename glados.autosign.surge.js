@@ -222,12 +222,15 @@ function isAlreadyCheckedIn(result) {
   );
 }
 
-function classifyCheckin(result) {
+function classifyCheckin(result, liveBalance) {
   if (!result || typeof result !== "object" || Array.isArray(result)) {
     throw new Error("GLaDOS 返回的签到数据无效");
   }
 
   const record = result.list && result.list[0];
+  const recordBalance = record && record.balance !== undefined ? record.balance : undefined;
+  // 实时余额优先（来自 /api/user/points），缺失时回退签到记录快照，避免显示过期余额。
+  const balance = liveBalance !== undefined ? liveBalance : recordBalance;
   if (isLoginError(result)) {
     return { kind: "login_expired", message: result.message || "登录状态已失效" };
   }
@@ -236,8 +239,8 @@ function classifyCheckin(result) {
     const earned = record && record.change !== undefined
       ? `今日签到获得${formatPoints(record.change)}积分`
       : "";
-    const total = record && record.balance !== undefined
-      ? `当前共${formatPoints(record.balance)}积分`
+    const total = balance !== undefined
+      ? `当前共${formatPoints(balance)}积分`
       : "";
     const pointsText = [earned, total].filter(Boolean).join("，");
     return {
@@ -247,7 +250,7 @@ function classifyCheckin(result) {
   }
 
   if (record && record.change !== undefined) {
-    const total = record.balance !== undefined ? `，共${formatPoints(record.balance)}积分` : "";
+    const total = balance !== undefined ? `，共${formatPoints(balance)}积分` : "";
     return {
       kind: "success",
       message: `签到成功！\n今日签到获得${formatPoints(record.change)}积分${total}`,
@@ -257,7 +260,8 @@ function classifyCheckin(result) {
   const code = Number(result.code);
   const detail = String(result.message || "").trim();
   if (code === 0 && /(?:success|成功)/i.test(detail)) {
-    return { kind: "success", message: `签到成功！${detail ? `\n${detail}` : ""}` };
+    const total = balance !== undefined ? `，共${formatPoints(balance)}积分` : "";
+    return { kind: "success", message: `签到成功！${detail ? `\n${detail}` : ""}${total}` };
   }
 
   throw new Error(`签到接口返回异常${detail ? `：${detail}` : ""}`);
@@ -315,6 +319,40 @@ function checkStatus(origin, cookie, authorization, checkin) {
           remainingDays: Number.isFinite(remaining) ? remaining : null,
         }
       );
+    }
+  );
+}
+
+/**
+ * Fetch the live spendable balance from /api/user/points (single attempt).
+ * Calls back with the raw points value, or undefined on failure —
+ * the check-in outcome must not depend on this optional request.
+ */
+function fetchLiveBalance(origin, cookie, authorization, callback) {
+  rawRequest(
+    "GET",
+    {
+      url: `${origin}/api/user/points`,
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        Cookie: cookie || "",
+        Authorization: authorization || "",
+      },
+    },
+    (error, response, body) => {
+      const status = responseStatus(response);
+      if (error || (status && (status < 200 || status >= 300))) {
+        return callback(undefined);
+      }
+      try {
+        const points = parseJson(body);
+        if (points && points.code === 0 && points.points !== undefined) {
+          return callback(points.points);
+        }
+      } catch (parseError) {
+        // 忽略，沿用签到记录余额。
+      }
+      callback(undefined);
     }
   );
 }
@@ -388,8 +426,19 @@ function checkin() {
         );
       }
 
-      writeStore(currentDate, LAST_SUCCESS_KEY);
-      checkStatus(origin, cookie, authorization, classified);
+      // 实时可用积分优先于签到记录快照（兑换发生在签到之后时，快照会过期）。
+      fetchLiveBalance(origin, cookie, authorization, (liveBalance) => {
+        if (liveBalance !== undefined) {
+          try {
+            classified = classifyCheckin(result, liveBalance);
+          } catch (error) {
+            // 保留实时积分查询前的分类结果。
+          }
+        }
+
+        writeStore(currentDate, LAST_SUCCESS_KEY);
+        checkStatus(origin, cookie, authorization, classified);
+      });
     }
   );
 }

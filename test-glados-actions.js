@@ -134,6 +134,11 @@ function testClassifyCheckinOutcomes() {
   assert.equal(success.kind, "success");
   assert.match(success.message, /签到成功/);
 
+  // 实时余额优先于签到记录快照
+  const liveBalance = classifyCheckin({ list: [{ change: "10.0", balance: "128.5" }] }, "218");
+  assert.match(liveBalance.message, /共218积分/);
+  assert.doesNotMatch(liveBalance.message, /128\.5/);
+
   const already = classifyCheckin({ message: "Checkin Repeats! Please Try Tomorrow", points: 0, code: 1 });
   assert.equal(already.kind, "already_checked");
 
@@ -204,6 +209,7 @@ async function testSuccessfulSingleAccount() {
   const fetchImpl = buildFetch([
     jsonResponse({ code: 0, data: { email: "user@example.com", leftDays: 441.9 } }),
     jsonResponse({ list: [{ change: "12", balance: "100" }] }),
+    jsonResponse({ code: 0, points: "218.0000000000000000" }),
   ]);
   const logger = createLogger();
   const outcome = await runCheckin({
@@ -217,12 +223,16 @@ async function testSuccessfulSingleAccount() {
   assert.equal(outcome.results[0].kind, "success");
   assert.equal(fetchImpl.calls[0].url, `${GLADOS_ORIGINS[0]}/api/user/status`);
   assert.equal(fetchImpl.calls[1].url, `${GLADOS_ORIGINS[0]}/api/user/checkin`);
+  assert.equal(fetchImpl.calls[2].url, `${GLADOS_ORIGINS[0]}/api/user/points`);
   assert.equal(
     JSON.parse(fetchImpl.calls[1].init.body).token,
     new URL(GLADOS_ORIGINS[0]).hostname
   );
   assert.equal(fetchImpl.calls[1].init.headers.Origin, GLADOS_ORIGINS[0]);
   assert.match(outcome.results[0].message, /签到域名：glados\.cloud/);
+  // 实时余额 218 优先于签到记录快照 100
+  assert.match(outcome.results[0].message, /共218积分/);
+  assert.doesNotMatch(outcome.results[0].message, /共100积分/);
   assert.doesNotMatch(logger.all(), /sig-ok-value/);
   assert.match(logger.all(), /us\*\*\*r@example\.com|签到成功/);
   assert.match(logger.all(), /签到域名：glados\.cloud/);
@@ -232,6 +242,7 @@ async function testAlreadyCheckedInExitZero() {
   const fetchImpl = buildFetch([
     jsonResponse({ code: 0, data: { email: "a@b.com", leftDays: 10 } }),
     jsonResponse({ code: 1 }),
+    jsonResponse({ code: 0, points: "88.0000000000000000" }),
   ]);
   const outcome = await runCheckin({
     env: { GLADOS_COOKIE: sampleCookie("done") },
@@ -242,6 +253,7 @@ async function testAlreadyCheckedInExitZero() {
   assert.equal(outcome.exitCode, 0);
   assert.equal(outcome.results[0].kind, "already_checked");
   assert.match(outcome.results[0].message, /签到域名：glados\.cloud/);
+  assert.match(outcome.results[0].message, /当前共88积分/);
   assert.equal(isSuccessfulOutcome(outcome.results[0].kind), true);
 }
 
@@ -252,6 +264,7 @@ async function testDomainFallbackSameOriginCheckin() {
     notLogged, // network
     jsonResponse({ code: 0, data: { email: "rocks@example.com", leftDays: 88 } }), // rocks
     jsonResponse({ list: [{ change: 9, balance: 99 }] }),
+    jsonResponse({ code: 0, points: "99.0000000000000000" }),
   ]);
   const outcome = await runCheckin({
     env: { GLADOS_COOKIE: sampleCookie("rocks") },
@@ -265,6 +278,7 @@ async function testDomainFallbackSameOriginCheckin() {
   assert.match(outcome.results[0].message, /签到域名：glados\.rocks/);
   assert.equal(fetchImpl.calls[2].url, "https://glados.rocks/api/user/status");
   assert.equal(fetchImpl.calls[3].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(fetchImpl.calls[4].url, "https://glados.rocks/api/user/points");
   assert.equal(fetchImpl.calls[3].init.headers.Origin, "https://glados.rocks");
   assert.equal(JSON.parse(fetchImpl.calls[3].init.body).token, "glados.rocks");
 }
@@ -273,8 +287,10 @@ async function testMultiAccountUsesEachBoundOrigin() {
   const fetchImpl = buildFetch([
     jsonResponse({ code: 0, data: { email: "cloud@example.com", leftDays: 10 } }),
     jsonResponse({ list: [{ change: 1, balance: 10 }] }),
+    jsonResponse({ code: 0, points: "10.0000000000000000" }),
     jsonResponse({ code: 0, data: { email: "rocks@example.com", leftDays: 20 } }),
     jsonResponse({ list: [{ change: 2, balance: 20 }] }),
+    jsonResponse({ code: 0, points: "20.0000000000000000" }),
   ]);
   const accounts = [
     { name: "cloud-account", origin: "https://glados.cloud", cookie: sampleCookie("cloud") },
@@ -296,12 +312,14 @@ async function testMultiAccountUsesEachBoundOrigin() {
     [
       "https://glados.cloud/api/user/status",
       "https://glados.cloud/api/user/checkin",
+      "https://glados.cloud/api/user/points",
       "https://glados.rocks/api/user/status",
       "https://glados.rocks/api/user/checkin",
+      "https://glados.rocks/api/user/points",
     ]
   );
   assert.equal(JSON.parse(fetchImpl.calls[1].init.body).token, "glados.cloud");
-  assert.equal(JSON.parse(fetchImpl.calls[3].init.body).token, "glados.rocks");
+  assert.equal(JSON.parse(fetchImpl.calls[4].init.body).token, "glados.rocks");
 }
 
 async function testForcedOrigin() {
@@ -318,6 +336,7 @@ async function testMultiAccountPartialFailureExitOne() {
     // account A success
     jsonResponse({ code: 0, data: { email: "a@example.com", leftDays: 1 } }),
     jsonResponse({ list: [{ change: 1, balance: 2 }] }),
+    jsonResponse({ code: 0, points: "2.0000000000000000" }),
     // account B all domains fail auth
     ...GLADOS_ORIGINS.map(() => textResponse("unauthorized", 401)),
   ]);
@@ -363,6 +382,9 @@ async function testRetryOn429ThenSuccess() {
     if (String(url).endsWith("/status")) {
       return jsonResponse({ code: 0, data: { email: "r@e.com", leftDays: 2 } });
     }
+    if (String(url).endsWith("/points")) {
+      return jsonResponse({ code: 0, points: "50.0000000000000000" });
+    }
     statusAttempts += 1;
     if (statusAttempts === 1) {
       return textResponse("slow down", 429);
@@ -388,6 +410,7 @@ async function testSkipRepeatWithinSameRun() {
   const fetchImpl = buildFetch([
     jsonResponse({ code: 0, data: { email: "once@example.com", leftDays: 5 } }),
     jsonResponse({ list: [{ change: 3, balance: 30 }] }),
+    jsonResponse({ code: 0, points: "30.0000000000000000" }),
   ]);
   const logger = createLogger();
   const env = { GLADOS_COOKIE: cookie };
@@ -477,7 +500,7 @@ function testWorkflowYamlStructure() {
 
 function testPackageScriptsAndVersion() {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
-  assert.equal(pkg.version, "1.5.9");
+  assert.equal(pkg.version, "1.6.0");
   assert.match(pkg.scripts.test, /test-glados-actions/);
   assert.match(pkg.scripts["checkin"], /cli\/checkin\.js/);
 }

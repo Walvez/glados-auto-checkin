@@ -85,19 +85,22 @@ async function testSuccessfulCheckin() {
       network: response({ code: 0, data: { email: "user@example.com", leftDays: 441.9 } }),
     }),
     response({ list: [{ change: "10.00000000", balance: "128.50000000" }] }),
+    response({ code: 0, points: "218.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, ORIGIN_COUNT + 1);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
   assert.equal(result.requests[0].headers.Referer, "https://glados.network/console");
   assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.network/api/user/checkin");
   assert.equal(result.requests[ORIGIN_COUNT].headers.Referer, "https://glados.network/console/checkin");
   assert.equal(result.requests[ORIGIN_COUNT].anonymous, false);
   assert.equal(JSON.parse(result.requests[ORIGIN_COUNT].data).token, "glados.network");
+  assert.equal(result.requests[ORIGIN_COUNT + 1].url, "https://glados.network/api/user/points");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 签到结果");
-  assert.equal(result.notifications[0].text, ".network: us**r@example.com, ✅, +10; 128.5积分, 441天.");
+  // 显示实时余额（218），而不是签到记录快照（128.5）
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, ✅, +10; 218积分, 441天.");
 }
 
 async function testManualCheckinMenuRunsAgainAndNotifies() {
@@ -107,8 +110,10 @@ async function testManualCheckinMenuRunsAgainAndNotifies() {
   const result = await runScript([
     ...loggedIn,
     response({ list: [{ change: 8, balance: 88 }] }),
+    response({ code: 0, points: "218.0000000000000000" }),
     ...loggedIn,
     response({ code: 1, message: "Please Try Tomorrow" }),
+    response({ code: 0, points: "218.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
@@ -117,10 +122,10 @@ async function testManualCheckinMenuRunsAgainAndNotifies() {
     "查看当前登录账号",
   ]);
   await result.menuCommands[0].callback();
-  assert.equal(result.requests.length, (ORIGIN_COUNT + 1) * 2);
+  assert.equal(result.requests.length, (ORIGIN_COUNT + 2) * 2);
   assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 2);
   assert.equal(result.notifications.length, 2);
-  assert.equal(result.notifications[1].text, ".network: ma**l@example.com, 已签, +?; ?积分, 60天.");
+  assert.equal(result.notifications[1].text, ".network: ma**l@example.com, 已签, +?; 218积分, 60天.");
 }
 
 async function testCurrentAccountMenuShowsEachDomainWithMaskedEmail() {
@@ -129,6 +134,7 @@ async function testCurrentAccountMenuShowsEachDomainWithMaskedEmail() {
       network: response({ code: 0, data: { email: "initial@example.com", leftDays: 60 } }),
     }),
     response({ list: [{ change: 8, balance: 88 }] }),
+    response({ code: 0, points: "100.0000000000000000" }),
     ...statusScan({
       network: response({ code: 0, data: { email: "first@example.com", leftDays: 60 } }),
       rocks: response({ code: 0, data: { email: "second@example.com", leftDays: 60 } }),
@@ -137,7 +143,7 @@ async function testCurrentAccountMenuShowsEachDomainWithMaskedEmail() {
 
   assert.equal(result.error, undefined);
   await result.menuCommands[1].callback();
-  assert.equal(result.requests.length, ORIGIN_COUNT + 1 + ORIGIN_COUNT);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2 + ORIGIN_COUNT);
   assert.equal(result.notifications.length, 2);
   assert.equal(result.notifications[1].title, "GLaDOS 当前登录账号");
   assert.match(result.notifications[1].text, /glados\.network：fi\*\*\*t@example\.com/);
@@ -151,10 +157,11 @@ async function testFallsBackToRocksLogin() {
       rocks: response({ code: 0, data: { email: "rocks@example.com", leftDays: 88 } }),
     }),
     response({ list: [{ change: 9, balance: 99 }] }),
+    response({ code: 0, points: "99.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, ORIGIN_COUNT + 1);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
   assert.equal(result.requests[0].url, "https://glados.network/api/user/status");
   assert.equal(result.requests[1].url, "https://glados.rocks/api/user/status");
   assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.rocks/api/user/checkin");
@@ -162,6 +169,7 @@ async function testFallsBackToRocksLogin() {
   assert.equal(result.requests[1].headers.Referer, "https://glados.rocks/console");
   assert.equal(result.requests[ORIGIN_COUNT].headers.Referer, "https://glados.rocks/console/checkin");
   assert.equal(JSON.parse(result.requests[ORIGIN_COUNT].data).token, "glados.rocks");
+  assert.equal(result.requests[ORIGIN_COUNT + 1].url, "https://glados.rocks/api/user/points");
   assert.equal(result.notifications[0].title, "GLaDOS 签到结果");
   assert.equal(result.notifications[0].text, ".rocks: ro**s@example.com, ✅, +9; 99积分, 88天.");
 }
@@ -176,6 +184,7 @@ async function testFindsSessionOnAdditionalMainDomains() {
         [domain]: response({ code: 0, data: { email: `${domain}@example.com`, leftDays: 50 } }),
       }),
       response({ list: [{ change: 5, balance: 100 }] }),
+      response({ code: 0, points: "100.0000000000000000" }),
     ]);
 
     assert.equal(result.error, undefined, `domain ${domain} should succeed`);
@@ -187,6 +196,7 @@ async function testFindsSessionOnAdditionalMainDomains() {
     assert.equal(checkinRequest.headers.Origin, origin);
     assert.equal(checkinRequest.headers.Referer, `${origin}/console/checkin`);
     assert.equal(JSON.parse(checkinRequest.data).token, tokenFor(domain));
+    assert.equal(result.requests[ORIGIN_COUNT + 1].url, `${origin}/api/user/points`);
   }
 }
 
@@ -197,21 +207,25 @@ async function testChecksInDifferentAccountsAcrossDomains() {
       rocks: response({ code: 0, data: { email: "second@example.com", leftDays: 200 } }),
     }),
     response({ list: [{ change: 5, balance: 50 }] }),
+    response({ code: 0, points: "50.0000000000000000" }),
     response({ message: "Please Try Tomorrow", code: 1, points: 0 }),
+    response({ code: 0, points: "150.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 4);
   assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.network/api/user/checkin");
-  assert.equal(result.requests[ORIGIN_COUNT + 1].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT + 1].url, "https://glados.network/api/user/points");
+  assert.equal(result.requests[ORIGIN_COUNT + 2].url, "https://glados.rocks/api/user/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT + 3].url, "https://glados.rocks/api/user/points");
   assert.equal(JSON.parse(result.requests[ORIGIN_COUNT].data).token, "glados.network");
-  assert.equal(JSON.parse(result.requests[ORIGIN_COUNT + 1].data).token, "glados.rocks");
+  assert.equal(JSON.parse(result.requests[ORIGIN_COUNT + 2].data).token, "glados.rocks");
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].title, "GLaDOS 多账号签到完成");
   assert.equal(
     result.notifications[0].text,
     ".network: fi**t@example.com, ✅, +5; 50积分, 100天.\n" +
-      ".rocks: se**d@example.com, 已签, +?; ?积分, 200天."
+      ".rocks: se**d@example.com, 已签, +?; 150积分, 200天."
   );
 }
 
@@ -222,12 +236,14 @@ async function testDeduplicatesSameAccountAcrossDomains() {
       rocks: response({ code: 0, data: { email: "SAME@example.com", leftDays: 50 } }),
     }),
     response({ list: [{ change: 2, balance: 20 }] }),
+    response({ code: 0, points: "20.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, ORIGIN_COUNT + 1);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
   assert.equal(result.requests.filter((item) => item.url.endsWith("/api/user/checkin")).length, 1);
   assert.equal(result.requests[ORIGIN_COUNT].url, "https://glados.network/api/user/checkin");
+  assert.equal(result.requests[ORIGIN_COUNT + 1].url, "https://glados.network/api/user/points");
   assert.match(result.logs.map((item) => item.message).join("\n"), /同一账号/);
 }
 
@@ -238,6 +254,7 @@ async function testMultiAccountPartialFailureContinuesAndSummarizes() {
       rocks: response({ code: 0, data: { email: "bad@example.com", leftDays: 20 } }),
     }),
     response({ list: [{ change: 3, balance: 30 }] }),
+    response({ code: 0, points: "30.0000000000000000" }),
     response({ code: -1, message: "server maintenance" }),
   ]);
 
@@ -260,6 +277,7 @@ async function testAlreadyCheckedIn() {
       message: " Please   Try Tomorrow! ",
       list: [{ change: 11, balance: 271 }],
     }),
+    response({ code: 0, points: "271.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
@@ -272,10 +290,11 @@ async function testAlreadyCheckedInChineseMessage() {
       network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
     }),
     response({ message: "今天已经签到，请明天再试" }),
+    response({ code: 0, points: "88.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; ?积分, 30天.");
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; 88积分, 30天.");
 }
 
 async function testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn() {
@@ -284,10 +303,11 @@ async function testCodeOneWithoutPointsOrMessageIsAlreadyCheckedIn() {
       network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
     }),
     response({ code: 1 }),
+    response({ code: 0, points: "55.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; ?积分, 30天.");
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; 55积分, 30天.");
 }
 
 async function testCurrentAlreadyCheckedInResponse() {
@@ -307,10 +327,12 @@ async function testCurrentAlreadyCheckedInResponse() {
         detail: "2026-07-13",
       }],
     }),
+    response({ code: 0, points: "218.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +11; 271积分, 426天.");
+  // 实时余额 218 优先于签到记录快照 271
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +11; 218积分, 426天.");
   assert.doesNotMatch(result.notifications[0].text, /签到成功/);
 }
 
@@ -338,10 +360,13 @@ async function testAlreadyCheckedInIgnoresNewerExchangeRecord() {
         },
       ],
     }),
+    // 兑换后的实时余额
+    response({ code: 0, points: "12.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +9; 512积分, 426天.");
+  // 显示实时余额 12（签到后兑换的最终余额），而不是签到快照 512 或兑换流水 12 的混淆结果
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +9; 12积分, 426天.");
   assert.doesNotMatch(result.notifications[0].text, /-500/);
 }
 
@@ -359,10 +384,11 @@ async function testAlreadyCheckedInDoesNotUseExchangeOnlyRecord() {
         balance: "12.0000000000000000",
       }],
     }),
+    response({ code: 0, points: "12.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; ?积分, 426天.");
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, 已签, +?; 12积分, 426天.");
 }
 
 async function testNeedsLogin() {
@@ -429,10 +455,11 @@ async function testRetriesHttp429() {
     }),
     response({ message: "rate limited" }, 429),
     response({ list: [{ change: 3, balance: 30 }] }),
+    response({ code: 0, points: "30.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 3);
   assert.match(result.notifications[0].text, /✅/);
 }
 
@@ -454,10 +481,11 @@ async function testExplicitSuccessWithoutPointRecord() {
       network: response({ code: 0, data: { email: "user@example.com", leftDays: null } }),
     }),
     response({ code: 0, message: "Checkin success" }),
+    response({ code: 0, points: "90.0000000000000000" }),
   ]);
 
   assert.equal(result.error, undefined);
-  assert.equal(result.notifications[0].text, ".network: us**r@example.com, ✅, +?; ?积分, ?天.");
+  assert.equal(result.notifications[0].text, ".network: us**r@example.com, ✅, +?; 90积分, ?天.");
 }
 
 async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
@@ -468,6 +496,7 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
         network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
       }),
       response({ list: [{ change: 3, balance: 30 }] }),
+      response({ code: 0, points: "30.0000000000000000" }),
       response({ code: 0 }),
     ],
     {
@@ -476,8 +505,8 @@ async function testOptionalPushDeerNotificationDoesNotLeakCredentials() {
   );
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, ORIGIN_COUNT + 2);
-  const remote = result.requests[ORIGIN_COUNT + 1];
+  assert.equal(result.requests.length, ORIGIN_COUNT + 3);
+  const remote = result.requests[ORIGIN_COUNT + 2];
   assert.equal(remote.url, "https://api2.pushdeer.com/message/push");
   assert.equal(remote.anonymous, true);
   assert.equal(remote.headers.Cookie, undefined);
@@ -499,6 +528,7 @@ async function testAdditionalRemoteNotificationChannels() {
         network: response({ code: 0, data: { email: "user@example.com", leftDays: 30 } }),
       }),
       response({ list: [{ change: 3, balance: 30 }] }),
+      response({ code: 0, points: "30.0000000000000000" }),
       response({ code: 0 }),
       response({ code: 0 }),
       response({ code: 0 }),
@@ -511,8 +541,8 @@ async function testAdditionalRemoteNotificationChannels() {
   );
 
   assert.equal(result.error, undefined);
-  assert.equal(result.requests.length, ORIGIN_COUNT + 6);
-  const remote = result.requests.slice(ORIGIN_COUNT + 1);
+  assert.equal(result.requests.length, ORIGIN_COUNT + 7);
+  const remote = result.requests.slice(ORIGIN_COUNT + 2);
   assert.deepEqual(
     remote.map((item) => item.url),
     [

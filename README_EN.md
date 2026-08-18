@@ -12,7 +12,7 @@ Check in automatically every day and receive clear result notifications<br>
 Supports **ScriptCat · Surge · Quantumult X · GitHub Actions** and all 7 GLaDOS main-site domains: `glados.network`, `glados.rocks`, `glados.one`, `glados.space`, `glados.cloud`, `glados.vip`, `glados-facility.com`
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.9-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](package.json)
 [![ScriptCat](https://img.shields.io/badge/ScriptCat-Install-ff6b35)](https://scriptcat.org/en/script-show-page/7014)
 [![Surge](https://img.shields.io/badge/Surge-Module-5b5bd6)](Surge/glados-auto-checkin.sgmodule)
 [![Quantumult X](https://img.shields.io/badge/Quantumult%20X-Snippet-111111)](QuantumultX/glados-auto-checkin.snippet)
@@ -246,6 +246,8 @@ The scripts distinguish a new successful check-in from one already completed ear
 | `.network: 14**5@qq.com, ✅, +7; 316积分, 411天.` | `.rocks: qq**5@gmail.com, 已签, +10; 271积分, 426天.` |
 
 `✅` means this run completed the first check-in of the day; `已签` means the account had already checked in. Multi-account notifications use one line per domain and omit the verbose summary sentence.
+
+The points shown in notifications are always the **live spendable balance re-read after the check-in** (`/api/user/points`), not the historical snapshot inside the check-in records — so if you exchanged points earlier that day, the notification reflects the balance after the exchange. When the live points endpoint is unavailable, the notification falls back to the balance in the check-in record.
 
 ScriptCat uses browser notifications by default and optionally supports PushDeer, ServerChan, Telegram, WeCom, DingTalk, Feishu, PushMe, and Bark. Surge and Quantumult X use their built-in notifications only.
 

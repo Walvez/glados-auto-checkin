@@ -1,6 +1,6 @@
 {
   "name": "glados-auto-checkin",
-  "version": "1.5.9",
+  "version": "1.6.0",
   "private": true,
   "engines": {
     "node": ">=18"

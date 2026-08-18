@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GLaDOS自动签到
 // @namespace    https://github.com/Walvez/glados-auto-checkin
-// @version      1.5.9
+// @version      1.6.0
 // @description  在脚本猫后台为不同主站域名中的账号逐一签到；无需复制 Cookie，也无需保持网页打开。
 // @author       Walvez
 // @icon         https://glados.network/favicon.ico
@@ -395,6 +395,31 @@ async function requestWithRetry(options) {
   throw lastError;
 }
 
+/**
+ * Fetch the live spendable balance from /api/user/points.
+ * Returns the raw points value, or undefined when unavailable/failed.
+ * Never throws — the check-in outcome must not depend on this request.
+ */
+async function fetchLivePoints(origin) {
+  try {
+    const points = await requestWithRetry({
+      method: "GET",
+      url: `${origin}/api/user/points`,
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        Referer: `${origin}/console/checkin`,
+      },
+    });
+    if (points && points.code === 0 && points.points !== undefined) {
+      return points.points;
+    }
+    return undefined;
+  } catch (error) {
+    log(`实时积分查询失败（沿用签到记录余额）：${error.message}`, "warn");
+    return undefined;
+  }
+}
+
 function formatPoints(value) {
   return String(value).replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
 }
@@ -534,12 +559,15 @@ function findCheckinRecord(result) {
   return records.some((record) => record.business) ? undefined : records[0];
 }
 
-function classifyCheckin(result) {
+function classifyCheckin(result, liveBalance) {
   if (!result || typeof result !== "object" || Array.isArray(result)) {
     throw new Error("GLaDOS 返回的签到数据无效");
   }
 
   const record = findCheckinRecord(result);
+  const recordBalance = record && record.balance !== undefined ? record.balance : undefined;
+  // 实时余额优先（来自 /api/user/points），缺失时回退签到记录快照，避免显示过期余额。
+  const balance = liveBalance !== undefined ? liveBalance : recordBalance;
 
   if (isLoginError(result)) {
     return { kind: "login_expired", message: result.message || "登录状态已失效" };
@@ -549,32 +577,37 @@ function classifyCheckin(result) {
     const earned = record && record.change !== undefined
       ? `今日签到获得${formatPoints(record.change)}积分`
       : "";
-    const total = record && record.balance !== undefined
-      ? `当前共${formatPoints(record.balance)}积分`
+    const total = balance !== undefined
+      ? `当前共${formatPoints(balance)}积分`
       : "";
     const pointsText = [earned, total].filter(Boolean).join("，");
     return {
       kind: "already_checked",
       message: `今日已签到。${pointsText ? `\n${pointsText}` : ""}`,
       earnedPoints: record && record.change !== undefined ? formatPoints(record.change) : undefined,
-      totalPoints: record && record.balance !== undefined ? formatPoints(record.balance) : undefined,
+      totalPoints: balance !== undefined ? formatPoints(balance) : undefined,
     };
   }
 
   if (record && record.change !== undefined) {
-    const total = record.balance !== undefined ? `，共${formatPoints(record.balance)}积分` : "";
+    const total = balance !== undefined ? `，共${formatPoints(balance)}积分` : "";
     return {
       kind: "success",
       message: `签到成功！\n今日签到获得${formatPoints(record.change)}积分${total}`,
       earnedPoints: formatPoints(record.change),
-      totalPoints: record.balance !== undefined ? formatPoints(record.balance) : undefined,
+      totalPoints: balance !== undefined ? formatPoints(balance) : undefined,
     };
   }
 
   const code = Number(result.code);
   const detail = String(result.message || "").trim();
   if (code === 0 && /(?:success|成功)/i.test(detail)) {
-    return { kind: "success", message: `签到成功！${detail ? `\n${detail}` : ""}` };
+    const total = balance !== undefined ? `，共${formatPoints(balance)}积分` : "";
+    return {
+      kind: "success",
+      message: `签到成功！${detail ? `\n${detail}` : ""}${total}`,
+      totalPoints: balance !== undefined ? formatPoints(balance) : undefined,
+    };
   }
 
   throw new Error(`签到接口返回异常${detail ? `：${detail}` : ""}`);
@@ -658,9 +691,20 @@ async function checkinSession({ origin, status }) {
     data: JSON.stringify({ token: origin.slice("https://".length) }),
   });
 
-  const checkin = classifyCheckin(result);
+  // 先分类：登录失效或接口异常时不发起额外的实时积分请求。
+  let checkin = classifyCheckin(result);
   if (checkin.kind === "login_expired") {
     throw new Error(`需要登录：${checkin.message}`);
+  }
+
+  // 实时可用积分优先于签到记录快照（兑换发生在签到之后时，快照会过期）。
+  const livePoints = await fetchLivePoints(origin);
+  if (livePoints !== undefined) {
+    try {
+      checkin = classifyCheckin(result, livePoints);
+    } catch (error) {
+      // 保留实时积分查询前的分类结果。
+    }
   }
 
   const remaining = Number.parseInt(status.data.leftDays, 10);

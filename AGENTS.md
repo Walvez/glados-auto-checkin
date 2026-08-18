@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-多端 GLaDOS 每日签到：ScriptCat 浏览器脚本、Surge / Quantumult X 本机模块、GitHub Actions / CLI。公开仓库 `Walvez/glados-auto-checkin`；现役版本以 `package.json` 与 `main` 为准（当前 **1.5.9**）。
+多端 GLaDOS 每日签到：ScriptCat 浏览器脚本、Surge / Quantumult X 本机模块、GitHub Actions / CLI。公开仓库 `Walvez/glados-auto-checkin`；现役版本以 `package.json` 与 `main` 为准（当前 **1.6.0**）。
 
 ## 怎么跑
 
@@ -39,6 +39,6 @@ ScriptCat 安装页：`https://scriptcat.org/zh-CN/script-show-page/7014`
 
 ## 当前状态
 
-- 代码 / 文档 / GitHub Raw / ScriptCat 1.5.9 已对齐 `glados-facility.com`
+- 代码 / 文档 / GitHub Raw / ScriptCat 1.6.0 已对齐 `glados-facility.com`
 - 无项目级 CLAUDE.md；本文件为 Codex/Agent 入口
 - 发布细节见 `~/.codex/memories/skills/glados-auto-checkin-release/SKILL.md`
